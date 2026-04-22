@@ -124,6 +124,8 @@ export interface Run {
   device_path_at_run: string;
   phases: RunPhase[];
   host_system?: Record<string, unknown> | null;
+  smart_before?: Record<string, unknown> | null;
+  smart_after?: Record<string, unknown> | null;
 }
 
 export interface RunSummary {
@@ -253,18 +255,77 @@ export interface PhaseCompareSample {
   write_clat_p99_ns: number | null;
 }
 
+export interface PhaseHistogramDirection {
+  total_ios: number;
+  histogram: { bin_ns: number; count: number }[];
+  cdf: { bin_ns: number; cdf: number; exceedance: number }[];
+}
+export interface PhaseHistogram {
+  run_id: string;
+  phase_id: string;
+  phase_name: string;
+  directions: Record<string, PhaseHistogramDirection>;
+}
+
+export interface DeviceHistoryEntry {
+  id: string;
+  profile_name: string;
+  status: string;
+  queued_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  best_read_iops: number | null;
+  best_write_iops: number | null;
+  best_read_bw_bytes: number | null;
+  best_write_bw_bytes: number | null;
+  phase_count: number;
+}
+export interface DeviceHistory {
+  device_id: string;
+  model: string;
+  serial: string;
+  firmware: string | null;
+  runs: DeviceHistoryEntry[];
+  firmware_changes: { captured_at: string; firmware: string }[];
+}
+
+export interface EnvironmentCheck {
+  category: string;
+  name: string;
+  severity: string;
+  value: string | null;
+  status: string;
+  expected: string | null;
+  remediation: string | null;
+  details: Record<string, unknown> | null;
+}
+export interface EnvironmentReport {
+  summary: { total: number; pass: number; warn: number; fail: number; info: number };
+  checks: EnvironmentCheck[];
+}
+
 export const api = {
   status: () => jsonFetch<SystemStatus>("/api/status"),
   listDevices: () => jsonFetch<Device[]>("/api/devices"),
   rescanDevices: () => jsonFetch<Device[]>("/api/devices/rescan", { method: "POST" }),
+  getDeviceHistory: (id: string) =>
+    jsonFetch<DeviceHistory>(`/api/devices/${encodeURIComponent(id)}/history`),
   listRuns: () => jsonFetch<RunSummary[]>("/api/runs"),
   listProfiles: () => jsonFetch<Profile[]>("/api/runs/profiles"),
   getRun: (id: string) => jsonFetch<Run>(`/api/runs/${id}`),
+  abortRun: (id: string) =>
+    jsonFetch<{ run_id: string; result: string }>(`/api/runs/${id}/abort`, {
+      method: "POST",
+    }),
   getRunTimeseries: (id: string, metric?: string) => {
     const qs = metric ? `?metric=${encodeURIComponent(metric)}` : "";
     return jsonFetch<MetricPoint[]>(`/api/runs/${id}/timeseries${qs}`);
   },
   getRunPhases: (id: string) => jsonFetch<PhaseSummary[]>(`/api/runs/${id}/phases`),
+  getPhaseHistogram: (runId: string, phaseId: string) =>
+    jsonFetch<PhaseHistogram>(
+      `/api/runs/${encodeURIComponent(runId)}/phases/${encodeURIComponent(phaseId)}/histogram`,
+    ),
   createRun: (body: {
     device_id: string;
     profile_name: string;
@@ -280,6 +341,7 @@ export const api = {
     jsonFetch<{ phase_name: string; samples: PhaseCompareSample[] }>(
       `/api/models/${encodeURIComponent(slug)}/compare?phase_name=${encodeURIComponent(phase_name)}`,
     ),
+  getEnvironment: () => jsonFetch<EnvironmentReport>("/api/environment"),
 };
 
 export function wsUrl(path: string): string {

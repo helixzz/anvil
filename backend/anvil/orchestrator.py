@@ -25,6 +25,8 @@ class JobQueue:
         self._worker: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._running_run_id: str | None = None
+        self._running_task: asyncio.Task[None] | None = None
+        self._abort_requests: set[str] = set()
 
     def start(self) -> None:
         if self._worker is None or self._worker.done():
@@ -41,18 +43,39 @@ class JobQueue:
     def running_run_id(self) -> str | None:
         return self._running_run_id
 
+    async def abort(self, run_id: str) -> str:
+        """Request abort for a queued or running run.
+
+        Returns the resulting status: "aborted_queued" for a run that was
+        drained from the queue without starting, "aborting" if the active run
+        was cancelled (caller should poll for the final status), or
+        "not_active" if the run is neither queued nor running.
+        """
+        if self._running_run_id == run_id and self._running_task is not None:
+            self._abort_requests.add(run_id)
+            self._running_task.cancel()
+            return "aborting"
+        return "not_active"
+
     async def _run_forever(self) -> None:
         while True:
             run_id = await self._queue.get()
             async with self._lock:
                 self._running_run_id = run_id
+                task = asyncio.create_task(_execute_run(run_id), name=f"anvil-run-{run_id}")
+                self._running_task = task
                 try:
-                    await _execute_run(run_id)
+                    await task
+                except asyncio.CancelledError:
+                    log.info("run_cancelled", run_id=run_id)
+                    await _mark_aborted(run_id)
                 except Exception as exc:
                     log.error("run_failed", run_id=run_id, error=str(exc), exc_info=True)
                     await _mark_failed(run_id, str(exc))
                 finally:
                     self._running_run_id = None
+                    self._running_task = None
+                    self._abort_requests.discard(run_id)
 
 
 _queue_instance: JobQueue | None = None
@@ -73,6 +96,21 @@ async def _mark_failed(run_id: str, error: str) -> None:
         run.status = RunStatus.FAILED.value
         run.error_message = error
         run.finished_at = datetime.now(UTC)
+
+
+async def _mark_aborted(run_id: str) -> None:
+    async with session_scope() as session:
+        run = await session.get(Run, run_id)
+        if run is None:
+            return
+        run.status = RunStatus.ABORTED.value
+        run.error_message = "aborted by user"
+        run.finished_at = datetime.now(UTC)
+    broadcaster = get_broadcaster()
+    await broadcaster.publish(
+        f"runs:{run_id}",
+        {"event": "run_aborted", "payload": {"run_id": run_id, "reason": "aborted by user"}},
+    )
 
 
 async def _execute_run(run_id: str) -> None:

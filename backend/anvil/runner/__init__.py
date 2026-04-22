@@ -49,14 +49,19 @@ class RunnerClient:
     async def smart(self, device_path: str) -> dict[str, Any]:
         return await self._call("smart", {"device_path": device_path})
 
-    async def _call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def environment(self) -> dict[str, Any]:
+        return await self._call("environment", {}, timeout=60.0)
+
+    async def _call(
+        self, method: str, params: dict[str, Any], timeout: float = 30.0
+    ) -> dict[str, Any]:
         async with self._lock:
             reader, writer = await asyncio.open_unix_connection(str(self.socket_path))
             try:
                 request = {"id": secrets.token_hex(8), "method": method, "params": params}
                 writer.write(json.dumps(request).encode() + b"\n")
                 await writer.drain()
-                line = await asyncio.wait_for(reader.readline(), timeout=30.0)
+                line = await asyncio.wait_for(reader.readline(), timeout=timeout)
                 response = json.loads(line or b"{}")
                 if "error" in response:
                     raise RuntimeError(response["error"])

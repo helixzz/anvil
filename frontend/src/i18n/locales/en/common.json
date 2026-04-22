@@ -8,7 +8,8 @@
     "devices": "Devices",
     "runs": "Runs",
     "newRun": "New run",
-    "models": "Models"
+    "models": "Models",
+    "system": "System"
   },
   "common": {
     "loading": "Loading…",
@@ -53,7 +54,13 @@
     "excluded": "Excluded",
     "reason": "Reason",
     "noDevices": "No block devices discovered yet. Click Rescan to enumerate.",
-    "lastSeen": "Last seen"
+    "lastSeen": "Last seen",
+    "history": "Run history (best IOPS and BW per completed run)",
+    "noHistory": "No completed runs yet for this device.",
+    "bestReadIops": "Best read IOPS",
+    "bestWriteIops": "Best write IOPS",
+    "bestReadBw": "Best read BW",
+    "bestWriteBw": "Best write BW"
   },
   "runs": {
     "title": "Runs",
@@ -90,7 +97,21 @@
     "errorMessage": "Error message",
     "waitingForRunner": "Waiting for runner…",
     "temperature": "Temperature",
-    "allMetrics": "All metrics"
+    "allMetrics": "All metrics",
+    "abortBtn": "Abort run",
+    "abortConfirm": "Abort this run? Any running fio process will receive SIGTERM. The run will be marked aborted.",
+    "latencyDistribution": "Latency distribution",
+    "pdf": "PDF (density)",
+    "cdf": "CDF",
+    "exceedance": "Exceedance (inverse CDF)",
+    "histogramEmpty": "Select a completed phase to see its latency distribution.",
+    "histogramUnavailable": "No json+ histogram bins available for this phase (fio may not have emitted them).",
+    "smartDiff": "SMART before / after",
+    "smartDiffHelp": "Raw numeric SMART fields from nvme smart-log before and after the run. Deltas shown for counters; temperature shown in °C.",
+    "smartField": "Field",
+    "smartBefore": "Before",
+    "smartAfter": "After",
+    "smartDelta": "Δ"
   },
   "newRun": {
     "title": "Start a new benchmark",
@@ -155,5 +176,22 @@
     "comparePhase": "Compare this test across runs",
     "selectPhase": "Select a test / phase",
     "phaseSamplesHelp": "Each bar is one run of this test on a device of this model."
+  },
+  "system": {
+    "title": "System environment",
+    "subtitle": "Host CPU / PCIe / NVMe / block-layer / load checks that influence benchmark reproducibility. Probed via the privileged runner with nsenter -t 1 -m.",
+    "total": "Total",
+    "pass": "Pass",
+    "warn": "Warn",
+    "fail": "Fail",
+    "info": "Info",
+    "check": "Check",
+    "status": "Status",
+    "value": "Value",
+    "expected": "Expected",
+    "severity": "Severity",
+    "remediation": "Remediation",
+    "onlyIssues": "Show issues only",
+    "noneInCategory": "No checks match the current filter."
   }
 }

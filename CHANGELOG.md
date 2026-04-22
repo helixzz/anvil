@@ -8,6 +8,64 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.3.0 — 2026-04-22
+
+### Added
+- **Latency-distribution chart on run detail**. Picks a phase and renders
+  its PDF, CDF, or Exceedance (inverse CDF) curve on a log-log scale,
+  overlaying read and write directions. Backed by
+  `GET /api/runs/{id}/phases/{phase_id}/histogram`, which parses the
+  already-persisted `fio json+` `clat_ns.bins` into histogram + CDF +
+  exceedance triples. Requires a fio build with `json+` support
+  (installed in the runner image).
+- **System environment page** (`/system`). The privileged runner walks
+  host `/proc`, `/sys`, and `/proc/1/root` paths (nsenter -t 1 -m) and
+  probes CPU frequency governor, turbo/boost state, SMT state, PCIe
+  ASPM policy, NVMe APST (`default_ps_max_latency_us`), block-layer
+  scheduler and `nr_requests` per attached NVMe, load average, swap
+  activity, and the presence + version of `fio`, `nvme`, `smartctl`.
+  Each check is surfaced with category, severity, expected value,
+  and (where safe) a copy-pastable remediation command. The UI groups
+  checks by category with pass/warn/fail/info counts up top, plus a
+  "Show issues only" filter. **Read-only for now**; auto-remediation
+  is a later roadmap item.
+- **Device history page** (`/devices/{id}`). For the selected device,
+  plots best read IOPS / write IOPS as bars and best read BW / write
+  BW as lines across every completed run, with vertical dashed
+  annotations at every firmware change captured in
+  `device_snapshots`. Powers the promised regression-tracking flow
+  from the design doc.
+- **Run abort**. Red "Abort run" button on any non-terminal run detail
+  page. Routes through `POST /api/runs/{id}/abort` → orchestrator
+  cancels the active `asyncio` task, which closes the RPC stream, which
+  makes the runner's fio subprocess receive SIGTERM through
+  `os.killpg`. The run is marked `aborted` with `error_message =
+  "aborted by user"` and a `run_aborted` event is broadcast to the
+  WebSocket so live viewers see the transition immediately.
+- **SMART before / after diff** on run detail. Extracts every numeric
+  field from `nvme_smart_log`, computes the delta, and renders it with
+  colour-coded Δ column (green for "got better", yellow for "went up").
+  Temperature values auto-convert from Kelvin to °C for display.
+- **Run detail live IOPS / BW / latency / temperature charts updated
+  mid-run**, not just after reload. (This line was already shipped in
+  0.2.2 but is restated here as part of the 0.3.0 summary because the
+  feature set it enables — live observation of long endurance runs —
+  matters for every new chart added in this release.)
+
+### Changed
+- Devices page model column is now a link into `/devices/{id}` so an
+  operator can jump from "which drives are plugged in" straight to
+  "how have they performed historically".
+- `RunnerClient._call` now accepts a per-call `timeout` kwarg (default
+  30 s) so the environment probe can get 60 s to walk `/sys`.
+
+### Notes
+- The latency-histogram chart is populated only when fio emits
+  `clat_ns.bins`, which is gated by `--output-format=json+`. Older
+  runs taken before 0.1.0 may not have the bins; the chart renders a
+  "No json+ histogram bins available for this phase" placeholder for
+  those.
+
 ## 0.2.2 — 2026-04-22
 
 ### Fixed

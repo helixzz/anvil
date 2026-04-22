@@ -6,11 +6,13 @@ import { useQuery } from "@tanstack/react-query";
 import { api, clearToken, getToken, setToken } from "@/api";
 import Dashboard from "@/pages/Dashboard";
 import Devices from "@/pages/Devices";
+import DeviceDetail from "@/pages/DeviceDetail";
 import Runs from "@/pages/Runs";
 import NewRun from "@/pages/NewRun";
 import RunDetail from "@/pages/RunDetail";
 import Models from "@/pages/Models";
 import ModelDetail from "@/pages/ModelDetail";
+import System from "@/pages/System";
 
 function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -106,6 +108,7 @@ export default function App() {
         <NavLink to="/devices">{t("nav.devices")}</NavLink>
         <NavLink to="/runs">{t("nav.runs")}</NavLink>
         <NavLink to="/models">{t("nav.models")}</NavLink>
+        <NavLink to="/system">{t("nav.system")}</NavLink>
         <NavLink to="/runs/new">{t("nav.newRun")}</NavLink>
         <div style={{ marginTop: "auto", paddingTop: 16 }} className="col">
           <div className="dim" style={{ fontSize: 12 }}>
@@ -141,11 +144,13 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/devices" element={<Devices />} />
+          <Route path="/devices/:id" element={<DeviceDetail />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/new" element={<NewRun />} />
           <Route path="/runs/:id" element={<RunDetail />} />
           <Route path="/models" element={<Models />} />
           <Route path="/models/:slug" element={<ModelDetail />} />
+          <Route path="/system" element={<System />} />
           <Route
             path="*"
             element={

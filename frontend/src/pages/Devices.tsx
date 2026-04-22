@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import dayjs from "dayjs";
 import { api } from "@/api";
 import { humanBytes } from "@/lib/format";
@@ -53,7 +54,11 @@ export default function Devices() {
                 const mps = mountPoints(d.metadata_json as Record<string, unknown>);
                 return (
                   <tr key={d.id}>
-                    <td>{d.model}</td>
+                    <td>
+                      <Link to={`/devices/${encodeURIComponent(d.id)}`} className="mono" style={{ fontSize: 12 }}>
+                        {d.model}
+                      </Link>
+                    </td>
                     <td className="mono" style={{ fontSize: 12 }}>{d.serial}</td>
                     <td className="mono" style={{ fontSize: 12 }}>{d.firmware ?? "—"}</td>
                     <td>{humanBytes(d.capacity_bytes)}</td>

@@ -108,6 +108,23 @@ async def create_run(
     return run
 
 
+@router.post("/{run_id}/abort")
+async def abort_run(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> dict[str, str]:
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    if run.status in (RunStatus.COMPLETE.value, RunStatus.FAILED.value, RunStatus.ABORTED.value):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Run already in terminal status: {run.status}",
+        )
+    result = await get_queue().abort(run_id)
+    await audit(actor="api", action="run_aborted", target=run_id, details={"result": result})
+    return {"run_id": run_id, "result": result}
+
+
 @router.get("/{run_id}", response_model=RunOut)
 async def get_run(run_id: str, session: AsyncSession = Depends(get_session)) -> Run:
     stmt = select(Run).options(selectinload(Run.phases)).where(Run.id == run_id)

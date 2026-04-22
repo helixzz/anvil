@@ -8,7 +8,8 @@
     "devices": "设备",
     "runs": "运行记录",
     "newRun": "新建运行",
-    "models": "设备型号库"
+    "models": "设备型号库",
+    "system": "系统环境"
   },
   "common": {
     "loading": "加载中…",
@@ -53,7 +54,13 @@
     "excluded": "已排除",
     "reason": "原因",
     "noDevices": "尚未发现任何块设备。点击\"重新扫描\"以枚举。",
-    "lastSeen": "最近发现"
+    "lastSeen": "最近发现",
+    "history": "历史运行（每次运行的最佳 IOPS / 带宽）",
+    "noHistory": "该设备尚无完成的运行。",
+    "bestReadIops": "最高读 IOPS",
+    "bestWriteIops": "最高写 IOPS",
+    "bestReadBw": "最高读带宽",
+    "bestWriteBw": "最高写带宽"
   },
   "runs": {
     "title": "运行记录",
@@ -90,7 +97,21 @@
     "errorMessage": "错误信息",
     "waitingForRunner": "等待 Runner 响应…",
     "temperature": "温度",
-    "allMetrics": "全部指标"
+    "allMetrics": "全部指标",
+    "abortBtn": "中止运行",
+    "abortConfirm": "确认中止此次运行？正在运行的 fio 进程会收到 SIGTERM，运行状态将被标记为“已中止”。",
+    "latencyDistribution": "延迟分布",
+    "pdf": "PDF（密度）",
+    "cdf": "CDF",
+    "exceedance": "超越概率（反 CDF）",
+    "histogramEmpty": "请选择一个已完成的阶段以查看其延迟分布。",
+    "histogramUnavailable": "该阶段没有 json+ 直方图数据（fio 可能未输出）。",
+    "smartDiff": "SMART 前后对比",
+    "smartDiffHelp": "运行前后 nvme smart-log 原始数值字段。计数类字段显示变化量；温度以 °C 显示。",
+    "smartField": "字段",
+    "smartBefore": "运行前",
+    "smartAfter": "运行后",
+    "smartDelta": "Δ"
   },
   "newRun": {
     "title": "启动新的基准测试",
@@ -155,5 +176,22 @@
     "comparePhase": "跨运行对比该测试用例",
     "selectPhase": "选择一个测试/阶段",
     "phaseSamplesHelp": "每一根柱子代表该型号一台设备的一次测试运行。"
+  },
+  "system": {
+    "title": "系统环境",
+    "subtitle": "影响基准测试可复现性的 CPU / PCIe / NVMe / 块设备 / 负载检查。通过 privileged runner + nsenter -t 1 -m 在宿主 mount namespace 中执行。",
+    "total": "总数",
+    "pass": "通过",
+    "warn": "警告",
+    "fail": "失败",
+    "info": "提示",
+    "check": "检查项",
+    "status": "状态",
+    "value": "当前值",
+    "expected": "期望值",
+    "severity": "严重级别",
+    "remediation": "修复建议",
+    "onlyIssues": "只显示问题项",
+    "noneInCategory": "当前筛选条件下无检查项。"
   }
 }

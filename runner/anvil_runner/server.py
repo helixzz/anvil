@@ -10,6 +10,7 @@ import structlog
 
 from anvil_runner.devices import lsblk_json, nvme_list, nvme_smart, read_smart, smartctl_all
 from anvil_runner.discovery import discover as discover_devices
+from anvil_runner.env import environment_report
 from anvil_runner.fio import FioRunner, PhaseRequest
 
 
@@ -67,6 +68,14 @@ async def run_server(socket_path: Path, simulation: bool = False) -> asyncio.Abs
                     return
                 result = await read_smart(device_path)
                 writer.write(json.dumps({"id": req_id, "result": result}).encode() + b"\n")
+                await writer.drain()
+                return
+
+            if method == "environment":
+                checks = await environment_report()
+                writer.write(json.dumps(
+                    {"id": req_id, "result": {"checks": checks}}
+                ).encode() + b"\n")
                 await writer.drain()
                 return
 

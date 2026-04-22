@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import dayjs from "dayjs";
 
@@ -15,11 +15,88 @@ import {
   TimeseriesChart,
 } from "@/components/TimeseriesChart";
 import { SweepChart } from "@/components/SweepChart";
+import { LatencyHistogramChart } from "@/components/LatencyHistogramChart";
 
 const POLL_INTERVAL_MS = 2000;
 
 function isTerminalStatus(status: string | undefined): boolean {
   return status === "complete" || status === "failed" || status === "aborted";
+}
+
+function numericSmartFields(
+  smart: Record<string, unknown> | null | undefined,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!smart) return out;
+  const nvme = (smart as Record<string, unknown>).nvme_smart_log;
+  if (nvme && typeof nvme === "object") {
+    for (const [k, v] of Object.entries(nvme as Record<string, unknown>)) {
+      if (typeof v === "number") out[k] = v;
+    }
+  }
+  return out;
+}
+
+function SmartDiffCard({
+  smartBefore,
+  smartAfter,
+}: {
+  smartBefore: Record<string, unknown> | null | undefined;
+  smartAfter: Record<string, unknown> | null | undefined;
+}) {
+  const { t } = useTranslation();
+  const before = numericSmartFields(smartBefore);
+  const after = numericSmartFields(smartAfter);
+  const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)])).sort();
+  const rows = keys
+    .map((k) => ({ k, b: before[k], a: after[k], delta: (after[k] ?? 0) - (before[k] ?? 0) }))
+    .filter((r) => r.b !== undefined || r.a !== undefined);
+
+  if (rows.length === 0) return null;
+
+  const TEMP_KEY = "temperature";
+
+  return (
+    <div className="card">
+      <h3>{t("runs.smartDiff")}</h3>
+      <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
+        {t("runs.smartDiffHelp")}
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>{t("runs.smartField")}</th>
+            <th>{t("runs.smartBefore")}</th>
+            <th>{t("runs.smartAfter")}</th>
+            <th>{t("runs.smartDelta")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.k}>
+              <td className="mono" style={{ fontSize: 12 }}>{r.k}</td>
+              <td className="mono">
+                {r.b === undefined ? "—" : r.k === TEMP_KEY ? `${r.b - 273} °C` : r.b.toLocaleString()}
+              </td>
+              <td className="mono">
+                {r.a === undefined ? "—" : r.k === TEMP_KEY ? `${r.a - 273} °C` : r.a.toLocaleString()}
+              </td>
+              <td
+                className="mono"
+                style={{
+                  color: r.delta === 0 ? "#94a3b8" : r.delta > 0 ? "#fde68a" : "#a7f3d0",
+                }}
+              >
+                {r.b === undefined || r.a === undefined
+                  ? "—"
+                  : (r.delta > 0 ? "+" : "") + r.delta.toLocaleString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function RunDetail() {
@@ -73,6 +150,27 @@ export default function RunDetail() {
   const run = runQ.data;
   const phases = phasesQ.data ?? [];
   const metrics = timeseriesQ.data ?? [];
+
+  const abortMut = useMutation({
+    mutationFn: () => api.abortRun(id),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["run", id] }),
+  });
+
+  const [histogramPhaseId, setHistogramPhaseId] = useState<string>("");
+  const [histogramMode, setHistogramMode] = useState<"pdf" | "cdf" | "exceedance">("exceedance");
+
+  const histogramQ = useQuery({
+    queryKey: ["phase-histogram", id, histogramPhaseId],
+    queryFn: () => api.getPhaseHistogram(id, histogramPhaseId),
+    enabled: !!id && !!histogramPhaseId,
+  });
+
+  useEffect(() => {
+    if (histogramPhaseId) return;
+    const firstComplete = phases.find((p) => p.finished_at);
+    if (firstComplete) setHistogramPhaseId(firstComplete.id);
+  }, [phases, histogramPhaseId]);
 
   const latestSample = useMemo(() => {
     const readIops = [...metrics].reverse().find((m) => m.metric_name === "read_iops");
@@ -149,6 +247,19 @@ export default function RunDetail() {
           <div>{t("runs.queuedAt")}: <span className="mono">{dayjs(run.queued_at).format("HH:mm:ss")}</span></div>
           {run.started_at && <div>{t("runs.startedAt")}: <span className="mono">{dayjs(run.started_at).format("HH:mm:ss")}</span></div>}
           {run.finished_at && <div>{t("runs.finishedAt")}: <span className="mono">{dayjs(run.finished_at).format("HH:mm:ss")}</span></div>}
+          {!terminal && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                className="btn-danger"
+                disabled={abortMut.isPending}
+                onClick={() => {
+                  if (window.confirm(t("runs.abortConfirm"))) abortMut.mutate();
+                }}
+              >
+                {abortMut.isPending ? t("common.loading") : t("runs.abortBtn")}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -265,6 +376,56 @@ export default function RunDetail() {
             metric="iops"
           />
         </div>
+      )}
+
+      <div className="card">
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ margin: 0 }}>{t("runs.latencyDistribution")}</h3>
+          <div className="row" style={{ gap: 8 }}>
+            <select
+              value={histogramPhaseId}
+              onChange={(e) => setHistogramPhaseId(e.target.value)}
+            >
+              <option value="">—</option>
+              {phases
+                .filter((p) => p.finished_at)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.phase_name}
+                  </option>
+                ))}
+            </select>
+            <select
+              value={histogramMode}
+              onChange={(e) => setHistogramMode(e.target.value as "pdf" | "cdf" | "exceedance")}
+            >
+              <option value="pdf">{t("runs.pdf")}</option>
+              <option value="cdf">{t("runs.cdf")}</option>
+              <option value="exceedance">{t("runs.exceedance")}</option>
+            </select>
+          </div>
+        </div>
+        {!histogramPhaseId ? (
+          <div className="dim" style={{ padding: 20, textAlign: "center" }}>
+            {t("runs.histogramEmpty")}
+          </div>
+        ) : histogramQ.isLoading ? (
+          <div className="dim">{t("common.loading")}</div>
+        ) : histogramQ.data && Object.keys(histogramQ.data.directions).length > 0 ? (
+          <LatencyHistogramChart
+            title={`${histogramQ.data.phase_name} · ${histogramMode.toUpperCase()}`}
+            directions={histogramQ.data.directions}
+            mode={histogramMode}
+          />
+        ) : (
+          <div className="dim" style={{ padding: 20, textAlign: "center" }}>
+            {t("runs.histogramUnavailable")}
+          </div>
+        )}
+      </div>
+
+      {(run.smart_before || run.smart_after) && (
+        <SmartDiffCard smartBefore={run.smart_before} smartAfter={run.smart_after} />
       )}
 
       <div className="card">

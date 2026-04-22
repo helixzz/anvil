@@ -81,6 +81,8 @@ class RunOut(BaseModel):
     device_path_at_run: str
     phases: list[RunPhaseOut] = Field(default_factory=list)
     host_system: dict[str, Any] | None = None
+    smart_before: dict[str, Any] | None = None
+    smart_after: dict[str, Any] | None = None
 
     class Config:
         from_attributes = True
