@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.env
+.env.local
+.env.*.local
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+dist/
+build/
+*.egg
+pip-wheel-metadata/
+
+# Node / Vite
+node_modules/
+.pnpm-store/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+.cache/
+
+# Emitted from tsc output even though we want noEmit
+frontend/src/**/*.js
+frontend/src/**/*.js.map
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Local state / runtime
+data/
+tmp/
+logs/
+run-*.log
+*.sqlite
+*.sqlite3
+.anvil-local/
+var/
+
+# Docker
+.docker/
+
+# OS noise
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Operator-specific
+deploy/secrets/
+*.pem
+*.key
+*.crt
+!*.example
+
+# Test artifacts
+test-results/
+playwright-report/

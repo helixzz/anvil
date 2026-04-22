@@ -1,0 +1,32 @@
+[project]
+name = "anvil-runner"
+version = "0.1.0"
+description = "Privileged worker that executes fio and queries devices on behalf of Anvil"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Anvil contributors" }]
+
+dependencies = [
+  "orjson>=3.10",
+  "structlog>=24.4",
+  "jinja2>=3.1",
+  "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "ruff>=0.7"]
+
+[project.scripts]
+anvil-runner = "anvil_runner.main:main"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["anvil_runner*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

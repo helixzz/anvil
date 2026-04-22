@@ -1,0 +1,118 @@
+{
+  "app": {
+    "name": "Anvil",
+    "tagline": "NVMe Validator & IOps Lab"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "devices": "Devices",
+    "runs": "Runs",
+    "newRun": "New run"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Error",
+    "refresh": "Refresh",
+    "rescan": "Rescan devices",
+    "start": "Start",
+    "cancel": "Cancel",
+    "back": "Back",
+    "yes": "Yes",
+    "no": "No",
+    "unknown": "Unknown",
+    "language": "Language",
+    "signOut": "Sign out"
+  },
+  "auth": {
+    "title": "Anvil access",
+    "description": "Enter the bearer token configured on the server to continue.",
+    "tokenPlaceholder": "ANVIL_BEARER_TOKEN",
+    "submit": "Authenticate"
+  },
+  "status": {
+    "runner": "Runner",
+    "runnerConnected": "Connected",
+    "runnerDisconnected": "Disconnected",
+    "simulation": "Simulation mode",
+    "devices": "Devices",
+    "queued": "Queued",
+    "running": "Running",
+    "version": "Version"
+  },
+  "devices": {
+    "title": "Devices",
+    "model": "Model",
+    "serial": "Serial",
+    "firmware": "Firmware",
+    "size": "Size",
+    "path": "Path",
+    "protocol": "Protocol",
+    "testable": "Testable",
+    "excluded": "Excluded",
+    "reason": "Reason",
+    "noDevices": "No block devices discovered yet. Click Rescan to enumerate.",
+    "lastSeen": "Last seen"
+  },
+  "runs": {
+    "title": "Runs",
+    "id": "Run",
+    "device": "Device",
+    "profile": "Profile",
+    "status": "Status",
+    "queuedAt": "Queued",
+    "startedAt": "Started",
+    "finishedAt": "Finished",
+    "noRuns": "No runs yet.",
+    "viewReport": "View",
+    "ongoing": "In progress",
+    "completed": "Completed",
+    "failed": "Failed",
+    "aborted": "Aborted",
+    "liveIops": "Live IOPS",
+    "progress": "Progress",
+    "summary": "Summary",
+    "phases": "Phases",
+    "readIops": "Read IOPS",
+    "writeIops": "Write IOPS",
+    "readBw": "Read BW",
+    "writeBw": "Write BW",
+    "meanLat": "Mean latency",
+    "p99Lat": "p99 latency",
+    "p9999Lat": "p99.99 latency",
+    "noPhases": "No phases recorded yet.",
+    "errorMessage": "Error message",
+    "waitingForRunner": "Waiting for runner…"
+  },
+  "newRun": {
+    "title": "Start a new benchmark",
+    "pickDevice": "Pick device",
+    "pickProfile": "Pick profile",
+    "preflight": "Pre-flight",
+    "confirm": "Confirm",
+    "launch": "Launch run",
+    "destructiveWarning": "This profile is marked destructive. Type the last 6 characters of the device serial to proceed.",
+    "serialInputPlaceholder": "e.g. 0UGN01",
+    "selectedProfile": "Selected profile",
+    "estimatedDuration": "Estimated duration",
+    "phases": "Phases",
+    "noTestable": "No testable devices available. Rescan first."
+  },
+  "status_labels": {
+    "queued": "Queued",
+    "preflight": "Pre-flight",
+    "running": "Running",
+    "complete": "Complete",
+    "aborted": "Aborted",
+    "failed": "Failed"
+  },
+  "units": {
+    "bytes": "B",
+    "iops": "IOPS",
+    "ns": "ns",
+    "us": "µs",
+    "ms": "ms",
+    "s": "s",
+    "mbps": "MB/s",
+    "gbps": "GB/s"
+  }
+}

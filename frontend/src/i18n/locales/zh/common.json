@@ -1,0 +1,118 @@
+{
+  "app": {
+    "name": "Anvil",
+    "tagline": "NVMe 验证与 IOps 实验台"
+  },
+  "nav": {
+    "dashboard": "总览",
+    "devices": "设备",
+    "runs": "运行记录",
+    "newRun": "新建运行"
+  },
+  "common": {
+    "loading": "加载中…",
+    "error": "错误",
+    "refresh": "刷新",
+    "rescan": "重新扫描设备",
+    "start": "开始",
+    "cancel": "取消",
+    "back": "返回",
+    "yes": "是",
+    "no": "否",
+    "unknown": "未知",
+    "language": "语言",
+    "signOut": "退出登录"
+  },
+  "auth": {
+    "title": "Anvil 访问",
+    "description": "请输入服务端配置的 Bearer Token 以继续。",
+    "tokenPlaceholder": "ANVIL_BEARER_TOKEN",
+    "submit": "验证"
+  },
+  "status": {
+    "runner": "Runner",
+    "runnerConnected": "已连接",
+    "runnerDisconnected": "未连接",
+    "simulation": "模拟模式",
+    "devices": "设备",
+    "queued": "排队中",
+    "running": "运行中",
+    "version": "版本"
+  },
+  "devices": {
+    "title": "设备",
+    "model": "型号",
+    "serial": "序列号",
+    "firmware": "固件",
+    "size": "容量",
+    "path": "路径",
+    "protocol": "协议",
+    "testable": "可测试",
+    "excluded": "已排除",
+    "reason": "原因",
+    "noDevices": "尚未发现任何块设备。点击“重新扫描”以枚举。",
+    "lastSeen": "最近发现"
+  },
+  "runs": {
+    "title": "运行记录",
+    "id": "运行",
+    "device": "设备",
+    "profile": "方案",
+    "status": "状态",
+    "queuedAt": "入队时间",
+    "startedAt": "开始时间",
+    "finishedAt": "完成时间",
+    "noRuns": "尚无运行记录。",
+    "viewReport": "查看",
+    "ongoing": "进行中",
+    "completed": "已完成",
+    "failed": "失败",
+    "aborted": "已中止",
+    "liveIops": "实时 IOPS",
+    "progress": "进度",
+    "summary": "汇总",
+    "phases": "阶段",
+    "readIops": "读 IOPS",
+    "writeIops": "写 IOPS",
+    "readBw": "读带宽",
+    "writeBw": "写带宽",
+    "meanLat": "平均时延",
+    "p99Lat": "p99 时延",
+    "p9999Lat": "p99.99 时延",
+    "noPhases": "尚未记录阶段。",
+    "errorMessage": "错误信息",
+    "waitingForRunner": "等待 Runner 响应…"
+  },
+  "newRun": {
+    "title": "启动新的基准测试",
+    "pickDevice": "选择设备",
+    "pickProfile": "选择方案",
+    "preflight": "预检",
+    "confirm": "确认",
+    "launch": "开始运行",
+    "destructiveWarning": "此方案为破坏性操作。请输入设备序列号的最后 6 位以确认。",
+    "serialInputPlaceholder": "示例：0UGN01",
+    "selectedProfile": "已选方案",
+    "estimatedDuration": "预估时长",
+    "phases": "阶段",
+    "noTestable": "没有可测试的设备，请先扫描。"
+  },
+  "status_labels": {
+    "queued": "排队中",
+    "preflight": "预检中",
+    "running": "运行中",
+    "complete": "已完成",
+    "aborted": "已中止",
+    "failed": "失败"
+  },
+  "units": {
+    "bytes": "字节",
+    "iops": "IOPS",
+    "ns": "ns",
+    "us": "µs",
+    "ms": "ms",
+    "s": "s",
+    "mbps": "MB/s",
+    "gbps": "GB/s"
+  }
+}

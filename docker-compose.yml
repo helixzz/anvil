@@ -1,0 +1,73 @@
+name: anvil
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-anvil}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-anvil}
+      POSTGRES_DB: ${POSTGRES_DB:-anvil}
+    volumes:
+      - anvil-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-anvil} -d $${POSTGRES_DB:-anvil}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  runner:
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+    privileged: true
+    pid: host
+    ipc: host
+    network_mode: host
+    volumes:
+      - /dev:/dev
+      - /sys:/sys
+      - /proc:/proc:ro
+      - anvil-runner-sock:/run/anvil
+      - anvil-runner-workdir:/var/tmp/anvil
+    environment:
+      ANVIL_SIMULATION_MODE: ${ANVIL_SIMULATION_MODE:-false}
+    command: ["anvil-runner", "--socket", "/run/anvil/runner.sock"]
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ANVIL_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-anvil}:${POSTGRES_PASSWORD:-anvil}@db:5432/${POSTGRES_DB:-anvil}
+      ANVIL_BEARER_TOKEN: ${ANVIL_BEARER_TOKEN:-dev-token-change-me}
+      ANVIL_RUNNER_SOCKET: /run/anvil/runner.sock
+      ANVIL_DATA_DIR: /var/lib/anvil
+      ANVIL_LOG_LEVEL: ${ANVIL_LOG_LEVEL:-info}
+      ANVIL_SIMULATION_MODE: ${ANVIL_SIMULATION_MODE:-false}
+    volumes:
+      - anvil-runner-sock:/run/anvil
+      - anvil-data:/var/lib/anvil
+    ports:
+      - "${ANVIL_HTTP_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "${ANVIL_WEB_PORT:-8081}:80"
+    restart: unless-stopped
+
+volumes:
+  anvil-pgdata:
+  anvil-data:
+  anvil-runner-sock:
+  anvil-runner-workdir:
