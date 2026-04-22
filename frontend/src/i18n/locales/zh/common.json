@@ -10,7 +10,8 @@
     "newRun": "新建运行",
     "models": "设备型号库",
     "compare": "跨型号对比",
-    "system": "系统环境"
+    "system": "系统环境",
+    "users": "用户管理"
   },
   "common": {
     "loading": "加载中…",
@@ -30,7 +31,14 @@
     "title": "Anvil 访问",
     "description": "请输入服务端配置的 Bearer Token 以继续。",
     "tokenPlaceholder": "ANVIL_BEARER_TOKEN",
-    "submit": "验证"
+    "submit": "验证",
+    "modeLogin": "用户名 + 密码",
+    "modeToken": "Bearer Token",
+    "loginHelp": "输入管理员在“用户管理”中创建的用户名与密码。全新部署时可用 admin 登录，密码为 ANVIL_BEARER_TOKEN 的前 16 位。",
+    "usernamePlaceholder": "用户名",
+    "passwordPlaceholder": "密码",
+    "submitLogin": "登录",
+    "signedInAs": "当前登录"
   },
   "status": {
     "runner": "Runner",
@@ -252,5 +260,24 @@
     "pcieDegradedHelp": "这些设备当前运行的 PCIe 速率或位宽低于其能力，在其上做测试得到的成绩不能反映设备的真实峰值。",
     "alarmsTitle": "近 24 小时告警",
     "alarmsHelp": "失败或被中止的运行。若因高温被中止，error_message 中会包含温度阈值和连续样本数。"
+  },
+  "admin": {
+    "usersTitle": "用户管理",
+    "usersSubtitle": "创建和管理 Anvil 用户。Viewer 仅可查看；Operator 可执行测试；Administrator 还可以管理用户。",
+    "createUser": "创建用户",
+    "existingUsers": "已有用户",
+    "noUsers": "暂无用户。",
+    "username": "用户名",
+    "password": "密码",
+    "displayName": "显示名",
+    "role": "角色",
+    "active": "已激活",
+    "lastLogin": "最近登录",
+    "created": "创建时间",
+    "createUserBtn": "创建",
+    "delete": "删除",
+    "deleteConfirm": "确认删除用户 \"{{username}}\"？此操作不可撤销。",
+    "yes": "是",
+    "no": "否"
   }
 }

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from anvil.api import require_bearer
+from anvil.auth import require_operator
 from anvil.db import get_session
 from anvil.models import Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.orchestrator import audit, get_queue
@@ -54,7 +55,8 @@ async def list_runs(
     return out
 
 
-@router.post("", response_model=RunOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RunOut, status_code=status.HTTP_201_CREATED,
+              dependencies=[Depends(require_operator)])
 async def create_run(
     payload: RunCreate, session: AsyncSession = Depends(get_session)
 ) -> Run:
@@ -111,7 +113,7 @@ async def create_run(
     return run
 
 
-@router.post("/{run_id}/abort")
+@router.post("/{run_id}/abort", dependencies=[Depends(require_operator)])
 async def abort_run(
     run_id: str, session: AsyncSession = Depends(get_session)
 ) -> dict[str, str]:

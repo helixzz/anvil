@@ -439,8 +439,45 @@ export interface SniaAnalysis {
   };
 }
 
+export interface AnvilUser {
+  id: string;
+  username: string;
+  display_name: string | null;
+  role: "viewer" | "operator" | "admin";
+  is_active: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
 export const api = {
   status: () => jsonFetch<SystemStatus>("/api/status"),
+  whoami: () =>
+    jsonFetch<{ user_id: string | null; username: string; role: string; is_token: boolean }>(
+      "/api/auth/me",
+    ),
+  login: (username: string, password: string) =>
+    jsonFetch<{ token: string; user: AnvilUser }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  adminListUsers: () => jsonFetch<AnvilUser[]>("/api/admin/users"),
+  adminCreateUser: (body: { username: string; password: string; display_name?: string; role: string }) =>
+    jsonFetch<AnvilUser>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  adminUpdateUser: (
+    id: string,
+    body: { display_name?: string; role?: string; is_active?: boolean; new_password?: string },
+  ) =>
+    jsonFetch<AnvilUser>(`/api/admin/users/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  adminDeleteUser: (id: string) =>
+    jsonFetch<{ deleted: string }>(`/api/admin/users/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
   listDevices: () => jsonFetch<Device[]>("/api/devices"),
   rescanDevices: () => jsonFetch<Device[]>("/api/devices/rescan", { method: "POST" }),
   getDeviceHistory: (id: string) =>

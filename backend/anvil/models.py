@@ -182,3 +182,23 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     target: Mapped[str | None] = mapped_column(String(256))
     details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+class UserRole(StrEnum):
+    VIEWER = "viewer"
+    OPERATOR = "operator"
+    ADMIN = "admin"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    username: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(256))
+    password_hash: Mapped[str | None] = mapped_column(String(256))
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default=UserRole.VIEWER.value)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(_tz_datetime)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)

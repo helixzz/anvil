@@ -8,6 +8,47 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.9.0 — 2026-04-22
+
+### Added
+- **RBAC with three roles** (Viewer / Operator / Administrator).
+  - `users` table added via Alembic migration `20260422_0002`. Rows
+    carry username, bcrypt password hash, role, active flag,
+    last-login timestamp, and metadata JSONB.
+  - New module `anvil.auth` with bcrypt password hashing, short-lived
+    (12 h) HS256 JWT issuance, and `require_viewer` /
+    `require_operator` / `require_admin` dependency factories.
+  - Legacy `ANVIL_BEARER_TOKEN` continues to work as a synthetic
+    "operator-token" principal with admin role so every existing CI
+    integration test and curl script keeps functioning unchanged.
+- **New API endpoints**:
+  - `POST /api/auth/login` (username + password → JWT).
+  - `GET /api/auth/me` (introspection).
+  - `GET /api/admin/users`, `POST /api/admin/users`,
+    `PATCH /api/admin/users/{id}`, `DELETE /api/admin/users/{id}` for
+    administrator-only user CRUD.
+- **Endpoint role enforcement**:
+  - `POST /api/runs`, `POST /api/runs/{id}/abort`, and
+    `POST /api/devices/rescan` now require the Operator role.
+  - All admin user-management endpoints require Administrator.
+  - Everything else is Viewer (any authenticated caller).
+- **Bootstrap admin**. On first startup with no admin user present, a
+  `admin` user is auto-created with a password equal to the first 16
+  characters of `ANVIL_BEARER_TOKEN`. A warning is logged; operators
+  should rotate the password immediately from the new Users page.
+- **Login form on the auth gate**. Two tabs — username+password and
+  legacy bearer-token — so both humans and automation can authenticate.
+  The sidebar now shows the signed-in username plus a role-coloured
+  badge (admin red, operator yellow, viewer default).
+- **Users admin page (`/admin/users`)** visible in the sidebar only
+  to admins (and the legacy token principal). Supports creating,
+  role-changing, deactivating, and deleting users; audit log records
+  every operation.
+
+### Notes
+- Existing SSO / SAML integration is prepared for but not yet wired;
+  that's the next cycle.
+
 ## 0.8.0 — 2026-04-22
 
 ### Added

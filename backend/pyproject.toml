@@ -1,6 +1,6 @@
 [project]
 name = "anvil-backend"
-version = "0.8.0"
+version = "0.9.0"
 description = "Anvil — NVMe Validator & IOps Lab, FastAPI backend"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -21,6 +21,8 @@ dependencies = [
   "jinja2>=3.1",
   "python-ulid>=3.0",
   "websockets>=13.1",
+  "passlib[bcrypt]>=1.7.4",
+  "pyjwt>=2.9",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +52,8 @@ ignore = ["E501", "RUF001", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
 "anvil/api/*" = ["B008"]
+"anvil/auth.py" = ["B008"]
+"anvil/main.py" = ["B008"]
 "alembic/versions/*" = ["E402"]
 
 [tool.mypy]

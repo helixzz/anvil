@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from anvil.api import require_bearer
+from anvil.auth import require_operator
 from anvil.db import get_session
 from anvil.discovery import discover
 from anvil.models import Device, DeviceSnapshot, Run
@@ -60,7 +61,7 @@ async def list_devices(session: AsyncSession = Depends(get_session)) -> list[Dev
     return list(result.scalars())
 
 
-@router.post("/rescan", response_model=list[DeviceOut])
+@router.post("/rescan", response_model=list[DeviceOut], dependencies=[Depends(require_operator)])
 async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
     found = await discover()
     now = datetime.now(UTC)

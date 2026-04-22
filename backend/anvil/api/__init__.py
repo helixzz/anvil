@@ -1,22 +1,32 @@
 from __future__ import annotations
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends
 
-from anvil.config import Settings, get_settings
+from anvil.auth import (
+    Principal,
+    require_admin,
+    require_operator,
+    require_viewer,
+    resolve_principal,
+)
 
 
-def require_bearer(
-    authorization: str | None = Header(default=None),
-    settings: Settings = Depends(get_settings),
-) -> None:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    token = authorization.split(" ", 1)[1].strip()
-    if token != settings.bearer_token:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid bearer token"
-        )
+async def require_bearer(principal: Principal = Depends(resolve_principal)) -> Principal:
+    """Back-compat shim: resolves to any authenticated principal (token or user).
+
+    Any `Depends(require_bearer)` site now gets a Principal; legacy code paths
+    that didn't care about the object and only needed 401/403 enforcement
+    still work because an auth failure aborts before reaching the handler.
+    New code should use the role-scoped dependencies from anvil.auth.
+    """
+    return principal
+
+
+__all__ = [
+    "Principal",
+    "require_admin",
+    "require_bearer",
+    "require_operator",
+    "require_viewer",
+    "resolve_principal",
+]

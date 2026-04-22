@@ -10,7 +10,8 @@
     "newRun": "New run",
     "models": "Models",
     "compare": "Compare",
-    "system": "System"
+    "system": "System",
+    "users": "Users"
   },
   "common": {
     "loading": "Loading…",
@@ -30,7 +31,14 @@
     "title": "Anvil access",
     "description": "Enter the bearer token configured on the server to continue.",
     "tokenPlaceholder": "ANVIL_BEARER_TOKEN",
-    "submit": "Authenticate"
+    "submit": "Authenticate",
+    "modeLogin": "Username + password",
+    "modeToken": "Bearer token",
+    "loginHelp": "Username and password for a user created in Admin → Users. On a fresh install log in as 'admin' with the first 16 characters of ANVIL_BEARER_TOKEN.",
+    "usernamePlaceholder": "username",
+    "passwordPlaceholder": "password",
+    "submitLogin": "Sign in",
+    "signedInAs": "Signed in as"
   },
   "status": {
     "runner": "Runner",
@@ -252,5 +260,24 @@
     "pcieDegradedHelp": "These drives are running at a PCIe speed or width below their capability. Benchmarks on them will under-report the drive's real peak performance.",
     "alarmsTitle": "Recent alarms (last 24 h)",
     "alarmsHelp": "Runs that ended in failure or abort. Thermal-abort reasons include a temperature threshold + consecutive-samples message in error_message."
+  },
+  "admin": {
+    "usersTitle": "User management",
+    "usersSubtitle": "Create and manage Anvil users. Viewers can only read; Operators can execute runs; Administrators can also manage users.",
+    "createUser": "Create user",
+    "existingUsers": "Existing users",
+    "noUsers": "No users yet.",
+    "username": "Username",
+    "password": "Password",
+    "displayName": "Display name",
+    "role": "Role",
+    "active": "Active",
+    "lastLogin": "Last login",
+    "created": "Created",
+    "createUserBtn": "Create",
+    "delete": "Delete",
+    "deleteConfirm": "Delete user \"{{username}}\"? This cannot be undone.",
+    "yes": "yes",
+    "no": "no"
   }
 }

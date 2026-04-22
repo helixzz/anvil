@@ -14,6 +14,7 @@ import Models from "@/pages/Models";
 import ModelDetail from "@/pages/ModelDetail";
 import Compare from "@/pages/Compare";
 import System from "@/pages/System";
+import Users from "@/pages/Users";
 
 function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -27,13 +28,30 @@ function LanguageSwitcher() {
 
 function TokenGate({ onAuth }: { onAuth: () => void }) {
   const { t } = useTranslation();
-  const [value, setValue] = useState("");
+  const [mode, setMode] = useState<"login" | "token">("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [tokenValue, setTokenValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
+  async function submitLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (!value) return;
-    setToken(value);
+    setError(null);
+    try {
+      const res = await api.login(username, password);
+      setToken(res.token);
+      onAuth();
+    } catch (err) {
+      clearToken();
+      setError((err as Error).message);
+    }
+  }
+
+  async function submitToken(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!tokenValue) return;
+    setToken(tokenValue);
     try {
       await api.status();
       onAuth();
@@ -47,20 +65,59 @@ function TokenGate({ onAuth }: { onAuth: () => void }) {
     <div className="token-gate">
       <div className="card">
         <h2>{t("auth.title")}</h2>
-        <p className="dim">{t("auth.description")}</p>
-        <form onSubmit={submit} className="col">
-          <input
-            type="password"
-            value={value}
-            placeholder={t("auth.tokenPlaceholder")}
-            onChange={(e) => setValue(e.target.value)}
-            autoFocus
-          />
-          <button type="submit" className="btn-primary">
-            {t("auth.submit")}
+        <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+          <button
+            className={mode === "login" ? "btn-primary" : ""}
+            onClick={() => setMode("login")}
+          >
+            {t("auth.modeLogin")}
           </button>
-          {error && <div className="badge badge-err">{error}</div>}
-        </form>
+          <button
+            className={mode === "token" ? "btn-primary" : ""}
+            onClick={() => setMode("token")}
+          >
+            {t("auth.modeToken")}
+          </button>
+        </div>
+        {mode === "login" ? (
+          <form onSubmit={submitLogin} className="col">
+            <p className="dim" style={{ fontSize: 12 }}>{t("auth.loginHelp")}</p>
+            <input
+              type="text"
+              autoComplete="username"
+              value={username}
+              placeholder={t("auth.usernamePlaceholder")}
+              onChange={(e) => setUsername(e.target.value)}
+              autoFocus
+            />
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              placeholder={t("auth.passwordPlaceholder")}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button type="submit" className="btn-primary">
+              {t("auth.submitLogin")}
+            </button>
+            {error && <div className="badge badge-err">{error}</div>}
+          </form>
+        ) : (
+          <form onSubmit={submitToken} className="col">
+            <p className="dim" style={{ fontSize: 12 }}>{t("auth.description")}</p>
+            <input
+              type="password"
+              value={tokenValue}
+              placeholder={t("auth.tokenPlaceholder")}
+              onChange={(e) => setTokenValue(e.target.value)}
+              autoFocus
+            />
+            <button type="submit" className="btn-primary">
+              {t("auth.submit")}
+            </button>
+            {error && <div className="badge badge-err">{error}</div>}
+          </form>
+        )}
       </div>
       <div style={{ textAlign: "center" }}>
         <LanguageSwitcher />
@@ -87,6 +144,13 @@ export default function App() {
     refetchInterval: 5000,
   });
 
+  const meQuery = useQuery({
+    queryKey: ["whoami"],
+    queryFn: api.whoami,
+    enabled: authenticated,
+  });
+  const isAdmin = meQuery.data?.role === "admin" || meQuery.data?.is_token;
+
   if (!authenticated) {
     return <TokenGate onAuth={() => setAuthenticated(true)} />;
   }
@@ -111,6 +175,7 @@ export default function App() {
         <NavLink to="/models">{t("nav.models")}</NavLink>
         <NavLink to="/compare">{t("nav.compare")}</NavLink>
         <NavLink to="/system">{t("nav.system")}</NavLink>
+        {isAdmin && <NavLink to="/admin/users">{t("nav.users")}</NavLink>}
         <NavLink to="/runs/new">{t("nav.newRun")}</NavLink>
         <div style={{ marginTop: "auto", paddingTop: 16 }} className="col">
           <div className="dim" style={{ fontSize: 12 }}>
@@ -123,6 +188,16 @@ export default function App() {
               web&nbsp;{__ANVIL_WEB_VERSION__}
             </span>
           </div>
+          {meQuery.data && (
+            <div className="dim" style={{ fontSize: 12 }}>
+              {t("auth.signedInAs")}:&nbsp;
+              <span className="mono">{meQuery.data.username}</span>
+              &nbsp;
+              <span className={`badge ${meQuery.data.role === "admin" ? "badge-err" : meQuery.data.role === "operator" ? "badge-warn" : "badge"}`}>
+                {meQuery.data.role}
+              </span>
+            </div>
+          )}
           <div className="dim" style={{ fontSize: 12 }}>
             {t("status.runner")}:&nbsp;
             <span
@@ -154,6 +229,7 @@ export default function App() {
           <Route path="/models/:slug" element={<ModelDetail />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/system" element={<System />} />
+          {isAdmin && <Route path="/admin/users" element={<Users />} /> }
           <Route
             path="*"
             element={
