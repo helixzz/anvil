@@ -8,6 +8,18 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.12.1 — 2026-04-23
+
+### Fixed
+- **Admin bootstrap crash on multi-admin deployments**. The startup
+  `_bootstrap_admin()` used `scalar_one_or_none()` to check whether any
+  admin user already exists, which raised `MultipleResultsFound` and
+  crash-looped the API container on live deployments that already had
+  more than one active admin (e.g. the bootstrap `admin` row plus one
+  SSO-provisioned admin). Switched to a `SELECT COUNT(*) > 0` check so
+  the presence of any admins short-circuits the bootstrap regardless
+  of how many exist.
+
 ## 0.12.0 — 2026-04-23
 
 ### Added

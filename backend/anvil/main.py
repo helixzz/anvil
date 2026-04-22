@@ -56,15 +56,19 @@ async def _bootstrap_admin() -> None:
     continues to work as an admin credential independently of this row.
     """
     import ulid
-    from sqlalchemy import select
+    from sqlalchemy import func, select
 
     log = get_logger("anvil.bootstrap")
     settings = get_settings()
     async with session_scope() as session:
-        result = await session.execute(
-            select(User).where(User.role == UserRole.ADMIN.value).where(User.is_active.is_(True))
-        )
-        if result.scalar_one_or_none() is not None:
+        admin_count = (
+            await session.execute(
+                select(func.count(User.id))
+                .where(User.role == UserRole.ADMIN.value)
+                .where(User.is_active.is_(True))
+            )
+        ).scalar_one()
+        if admin_count > 0:
             return
         bootstrap_pw = settings.bearer_token[:16]
         user = User(
