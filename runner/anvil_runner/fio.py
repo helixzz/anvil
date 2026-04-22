@@ -95,7 +95,6 @@ class FioRunner:
     ) -> AsyncIterator[dict[str, Any]]:
         jobfile = self._render_jobfile(device, phase)
         job_path = self.workdir / f"{run_id}.{phase.name}.fio"
-        result_path = self.workdir / f"{run_id}.{phase.name}.json"
         job_path.write_text(jobfile)
 
         yield {"event": "phase_started", "payload": {
@@ -107,7 +106,6 @@ class FioRunner:
         cmd = [
             self.fio_binary,
             "--output-format=json+",
-            f"--output={result_path}",
             "--status-interval=1",
             str(job_path),
         ]
@@ -123,7 +121,9 @@ class FioRunner:
         stderr_task = asyncio.create_task(_drain(proc.stderr))
 
         buffer: list[str] = []
+        stdout_all: list[str] = []
         depth = 0
+        seen_open = False
 
         try:
             while not proc.stdout.at_eof():
@@ -134,15 +134,21 @@ class FioRunner:
                 if not chunk:
                     break
                 text = chunk.decode(errors="replace")
+                stdout_all.append(text)
                 for ch in text:
-                    buffer.append(ch)
                     if ch == "{":
-                        depth += 1
-                    elif ch == "}":
-                        depth -= 1
                         if depth == 0:
+                            buffer = []
+                            seen_open = True
+                        depth += 1
+                    if seen_open:
+                        buffer.append(ch)
+                    if ch == "}" and depth > 0:
+                        depth -= 1
+                        if depth == 0 and seen_open:
                             raw = "".join(buffer).strip()
-                            buffer.clear()
+                            buffer = []
+                            seen_open = False
                             try:
                                 snapshot = json.loads(raw)
                             except json.JSONDecodeError:
@@ -168,18 +174,11 @@ class FioRunner:
             }}
             return
 
-        if result_path.exists():
-            fio_result = _parse_last_json_object(result_path.read_text())
-            if fio_result is None:
-                yield {"event": "phase_failed", "payload": {
-                    "phase_name": phase.name,
-                    "error": "fio output had no parseable JSON object",
-                }}
-                return
-        else:
+        fio_result = _parse_last_json_object("".join(stdout_all))
+        if fio_result is None:
             yield {"event": "phase_failed", "payload": {
                 "phase_name": phase.name,
-                "error": "fio produced no output file",
+                "error": "fio produced no parseable JSON on stdout",
             }}
             return
 
