@@ -33,6 +33,7 @@ class DiscoveredDevice:
     exclusion_reason: str | None
     partitions: list[str] = field(default_factory=list)
     mount_points: list[str] = field(default_factory=list)
+    product_name: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -53,6 +54,7 @@ class DiscoveredDevice:
             "exclusion_reason": self.exclusion_reason,
             "partitions": self.partitions,
             "mount_points": self.mount_points,
+            "product_name": self.product_name,
         }
 
 
@@ -381,6 +383,10 @@ async def discover() -> list[DiscoveredDevice]:
             is_testable = False
             exclusion_reason = exclusion_reason or "missing model or serial"
 
+        product_name = ""
+        if nvme_entry:
+            product_name = (nvme_entry.get("ProductName") or "").strip()
+
         size_bytes = int(entry.get("size") or 0)
         rota = bool(entry.get("rota"))
         log_sec = entry.get("log-sec")
@@ -405,6 +411,7 @@ async def discover() -> list[DiscoveredDevice]:
                 exclusion_reason=exclusion_reason,
                 partitions=partition_paths,
                 mount_points=all_mountpoints,
+                product_name=product_name,
             )
         )
 

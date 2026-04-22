@@ -22,6 +22,12 @@ def _model_slug(vendor: str | None, model: str) -> str:
     return " ".join(parts).strip().replace("/", "_").replace(" ", "-")
 
 
+def _brand_for(device: Device) -> str:
+    if device.vendor:
+        return device.vendor
+    return _infer_brand(device.model)
+
+
 def _infer_brand(model: str) -> str:
     m = model.upper()
     for brand in (
@@ -43,7 +49,7 @@ async def list_models(session: AsyncSession = Depends(get_session)) -> list[dict
     )
     models: dict[str, dict[str, Any]] = {}
     for d in result.scalars():
-        brand = _infer_brand(d.model)
+        brand = _brand_for(d)
         key = _model_slug(brand, d.model)
         entry = models.setdefault(
             key,
@@ -90,7 +96,7 @@ async def model_detail(
     slug: str, session: AsyncSession = Depends(get_session)
 ) -> dict[str, Any]:
     all_devices = (await session.execute(select(Device))).scalars().all()
-    matching = [d for d in all_devices if _model_slug(_infer_brand(d.model), d.model) == slug]
+    matching = [d for d in all_devices if _model_slug(_brand_for(d), d.model) == slug]
     if not matching:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
 
@@ -111,7 +117,7 @@ async def model_detail(
 
     return {
         "slug": slug,
-        "brand": _infer_brand(matching[0].model),
+        "brand": _brand_for(matching[0]),
         "model": matching[0].model,
         "protocol": matching[0].protocol,
         "form_factor": matching[0].form_factor,
@@ -267,7 +273,7 @@ async def compare_phase(
     all_devices = (await session.execute(select(Device))).scalars().all()
     matching_ids = [
         d.id for d in all_devices
-        if _model_slug(_infer_brand(d.model), d.model) == slug
+        if _model_slug(_brand_for(d), d.model) == slug
     ]
     if not matching_ids:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")

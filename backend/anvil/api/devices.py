@@ -17,6 +17,42 @@ from anvil.schemas import DeviceOut
 router = APIRouter(prefix="/devices", tags=["devices"], dependencies=[Depends(require_bearer)])
 
 
+_VENDOR_KEYWORDS = (
+    ("SAMSUNG", "Samsung"),
+    ("INTEL", "Intel"),
+    ("SOLIDIGM", "Solidigm"),
+    ("MICRON", "Micron"),
+    ("CRUCIAL", "Crucial"),
+    ("KIOXIA", "Kioxia"),
+    ("TOSHIBA", "Toshiba"),
+    ("WESTERN DIGITAL", "WDC"),
+    ("SANDISK", "SanDisk"),
+    ("HGST", "HGST"),
+    ("SEAGATE", "Seagate"),
+    ("KINGSTON", "Kingston"),
+    ("SK HYNIX", "SK Hynix"),
+    ("HYNIX", "SK Hynix"),
+    ("DAPUSTOR", "DapuStor"),
+    ("HUAWEI", "Huawei"),
+    ("ADATA", "ADATA"),
+    ("CORSAIR", "Corsair"),
+    ("LEXAR", "Lexar"),
+    ("PHISON", "Phison"),
+    ("MAXIO", "Maxio"),
+    ("REALTEK", "Realtek"),
+)
+
+
+def _vendor_from_product(product_name: str) -> str | None:
+    if not product_name:
+        return None
+    upper = product_name.upper()
+    for needle, canonical in _VENDOR_KEYWORDS:
+        if needle in upper:
+            return canonical
+    return None
+
+
 @router.get("", response_model=list[DeviceOut])
 async def list_devices(session: AsyncSession = Depends(get_session)) -> list[Device]:
     result = await session.execute(select(Device).order_by(Device.last_seen.desc()))
@@ -43,6 +79,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
                 model=d.model,
                 serial=d.serial,
                 firmware=d.firmware,
+                vendor=_vendor_from_product(d.product_name),
                 protocol=d.protocol,
                 capacity_bytes=d.size_bytes,
                 sector_size_logical=d.sector_size_logical,
@@ -56,6 +93,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
                     "rotational": d.rotational,
                     "partitions": d.partitions,
                     "mount_points": d.mount_points,
+                    "product_name": d.product_name,
                 },
             )
             session.add(device)
@@ -63,6 +101,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
             device.model = d.model or device.model
             device.serial = d.serial or device.serial
             device.firmware = d.firmware or device.firmware
+            device.vendor = _vendor_from_product(d.product_name) or device.vendor
             device.protocol = d.protocol
             device.capacity_bytes = d.size_bytes or device.capacity_bytes
             device.sector_size_logical = d.sector_size_logical or device.sector_size_logical
@@ -76,6 +115,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
                 "rotational": d.rotational,
                 "partitions": d.partitions,
                 "mount_points": d.mount_points,
+                "product_name": d.product_name,
             }
 
         snapshot = DeviceSnapshot(
