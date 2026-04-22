@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -75,15 +76,19 @@ def _host_ns_prefix() -> list[str]:
     global _HOST_NSENTER
     if _HOST_NSENTER is not None:
         return _HOST_NSENTER
-    mnt_ns = Path("/proc/1/ns/mnt")
+    self_ns = Path("/proc/self/ns/mnt")
+    init_ns = Path("/proc/1/ns/mnt")
     try:
-        if mnt_ns.exists():
-            mnt_ns.resolve(strict=True)
-            _HOST_NSENTER = ["nsenter", "-t", "1", "-m", "--"]
-            return _HOST_NSENTER
+        if self_ns.is_symlink() and init_ns.is_symlink():
+            if os.readlink(self_ns) == os.readlink(init_ns):
+                _HOST_NSENTER = []
+                return _HOST_NSENTER
     except (OSError, PermissionError):
         pass
-    _HOST_NSENTER = []
+    if Path("/proc/1/ns/mnt").is_symlink() and shutil.which("nsenter"):
+        _HOST_NSENTER = ["nsenter", "-t", "1", "-m", "--"]
+    else:
+        _HOST_NSENTER = []
     return _HOST_NSENTER
 
 
@@ -111,10 +116,13 @@ async def _run_cmd(*args: str, timeout: float = 15.0) -> tuple[int, str, str]:
 async def _run_host(*args: str, timeout: float = 15.0) -> tuple[int, str, str]:
     """Run a command in the host mount namespace (falls back to local namespace)."""
     prefix = _host_ns_prefix()
-    cmd = (*prefix, *args) if prefix else args
-    rc, out, err = await _run_cmd(*cmd, timeout=timeout)
-    if prefix and rc == 127:
-        rc, out, err = await _run_cmd(*args, timeout=timeout)
+    if not prefix:
+        return await _run_cmd(*args, timeout=timeout)
+    rc, out, err = await _run_cmd(*prefix, *args, timeout=timeout)
+    if rc != 0 and not out:
+        rc2, out2, err2 = await _run_cmd(*args, timeout=timeout)
+        if rc2 == 0 or out2:
+            return rc2, out2, err2
     return rc, out, err
 
 
