@@ -249,6 +249,75 @@ STABILITY_PROFILE = Profile(
 )
 
 
+SNIA_PTS_BLOCK_SIZES = (4 * KIB, 64 * KIB, 1 * MIB)
+SNIA_PTS_RW_MIXES = (0, 35, 100)
+SNIA_PTS_ROUND_COUNT = 5
+SNIA_PTS_PRECOND_SECONDS = 60
+SNIA_PTS_CELL_SECONDS = 45
+
+
+def _snia_quick_phases() -> tuple[PhaseSpec, ...]:
+    """Generate a SNIA-flavoured test matrix: 5 rounds x (3 BS x 3 R/W mixes).
+
+    Each cell runs for 45 s at QD32 with 2 jobs so the round completes in
+    3*3*45 = 405 s ~= 7 min; 5 rounds = 35 min plus a 60 s workload-
+    independent seq-write preconditioning pass. The runner writes the
+    entire addressable test region for preconditioning before any cell.
+
+    Phase naming: snia_r<round>_bs<bs>_w<rwmix_write_pct>_rw so the post-
+    run analysis endpoint can regex-group them by round.
+    """
+    phases: list[PhaseSpec] = [
+        _mixed_phase(
+            "snia_precondition_seq_1m",
+            pattern="write",
+            block_size=1 * MIB,
+            iodepth=32,
+            rwmix_write_pct=100,
+            runtime_s=SNIA_PTS_PRECOND_SECONDS,
+        ),
+    ]
+    for r in range(1, SNIA_PTS_ROUND_COUNT + 1):
+        for bs in SNIA_PTS_BLOCK_SIZES:
+            for rw_read_pct in (100, 65, 0):
+                rwmix_write_pct = 100 - rw_read_pct
+                if rwmix_write_pct == 0:
+                    pattern = "randread"
+                elif rwmix_write_pct == 100:
+                    pattern = "randwrite"
+                else:
+                    pattern = "randrw"
+                bs_label = "4k" if bs == 4 * KIB else "64k" if bs == 64 * KIB else "1m"
+                phases.append(
+                    _mixed_phase(
+                        f"snia_r{r}_bs{bs_label}_w{rwmix_write_pct}",
+                        pattern=pattern,
+                        block_size=bs,
+                        iodepth=32,
+                        numjobs=2,
+                        rwmix_write_pct=rwmix_write_pct,
+                        runtime_s=SNIA_PTS_CELL_SECONDS,
+                    )
+                )
+    return tuple(phases)
+
+
+SNIA_QUICK_PTS_PROFILE = Profile(
+    name="snia_quick_pts",
+    title="SNIA PTS Quick (5 rounds × 3×3 matrix)",
+    description=(
+        "Streamlined SNIA PTS IOPS test: workload-independent 128K seq write "
+        "preconditioning, then 5 rounds of a 3×3 matrix (block sizes 4 KiB / "
+        "64 KiB / 1 MiB at R/W mixes 100/0, 65/35, 0/100) at QD 32 with 2 jobs. "
+        "Steady-state convergence is checked after the run using the 4K 100% "
+        "write IOPS metric per SNIA §7.2 (range ≤ 20 %, slope drift ≤ 10 %). "
+        "Destructive. ~35 minutes total."
+    ),
+    destructive=True,
+    phases=_snia_quick_phases(),
+)
+
+
 PROFILES: dict[str, Profile] = {
     p.name: p
     for p in (
@@ -260,6 +329,7 @@ PROFILES: dict[str, Profile] = {
         VIDEO_EDITING_PROFILE,
         DESKTOP_GENERAL_PROFILE,
         STABILITY_PROFILE,
+        SNIA_QUICK_PTS_PROFILE,
     )
 }
 

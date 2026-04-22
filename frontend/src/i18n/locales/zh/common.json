@@ -112,7 +112,16 @@
     "smartField": "字段",
     "smartBefore": "运行前",
     "smartAfter": "运行后",
-    "smartDelta": "Δ"
+    "smartDelta": "Δ",
+    "sniaAnalysis": "SNIA PTS 稳态分析",
+    "sniaHelp": "依据 SNIA SSS-PTS v2.0.2 §7.2：达到稳态需同时满足 —— 4 KiB 纯写 IOPS 在最后 5 轮中 (max − min) ≤ 均值 20 %，且线性拟合漂移 ≤ 均值 10 %。",
+    "sniaSteady": "已达到稳态",
+    "sniaIopsPerRound": "4 KiB 纯写 IOPS，每轮",
+    "sniaMetric": "指标",
+    "sniaRangeBand": "容差区间",
+    "sniaCriterion": "判据",
+    "sniaObserved": "实测",
+    "sniaLimit": "阈值"
   },
   "newRun": {
     "title": "启动新的基准测试",

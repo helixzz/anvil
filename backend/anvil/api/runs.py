@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -11,6 +13,7 @@ from anvil.db import get_session
 from anvil.models import Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.orchestrator import audit, get_queue
 from anvil.profiles import get_profile, list_profiles
+from anvil.profiles.snia import RoundObservation, evaluate_steady_state
 from anvil.schemas import MetricPoint, ProfileOut, RunCreate, RunOut, RunSummary
 
 router = APIRouter(prefix="/runs", tags=["runs"], dependencies=[Depends(require_bearer)])
@@ -277,4 +280,96 @@ async def get_phase_histogram(
         "phase_id": phase_id,
         "phase_name": phase.phase_name,
         "directions": directions,
+    }
+
+
+_SNIA_PHASE_RE = re.compile(r"^snia_r(\d+)_bs([^_]+)_w(\d+)$")
+
+
+@router.get("/{run_id}/snia-analysis")
+async def get_snia_analysis(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Fit SNIA-PTS steady-state math over a run's round-structured phases.
+
+    Groups completed phases by round index parsed from the phase name
+    (snia_r<N>_bs<BS>_w<WPCT>), extracts the 4 KiB 100% write IOPS per
+    round as the SNIA canonical convergence metric, and returns both the
+    per-round raw data (every cell in the matrix) and the
+    `evaluate_steady_state` output. Works for the static snia_quick_pts
+    profile; later adaptive SNIA profiles can emit the same phase-name
+    shape and light this up automatically.
+    """
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    result = await session.execute(
+        select(RunPhase)
+        .where(RunPhase.run_id == run_id)
+        .order_by(RunPhase.phase_order.asc())
+    )
+    by_round: dict[int, list[dict]] = {}
+    for p in result.scalars():
+        m = _SNIA_PHASE_RE.match(p.phase_name)
+        if not m:
+            continue
+        rnd = int(m.group(1))
+        bs_label = m.group(2)
+        wpct = int(m.group(3))
+        cell = {
+            "phase_id": p.id,
+            "phase_name": p.phase_name,
+            "block_size_label": bs_label,
+            "rwmix_write_pct": wpct,
+            "iodepth": p.iodepth,
+            "numjobs": p.numjobs,
+            "runtime_s": p.runtime_s,
+            "read_iops": p.read_iops,
+            "write_iops": p.write_iops,
+            "read_bw_bytes": p.read_bw_bytes,
+            "write_bw_bytes": p.write_bw_bytes,
+            "read_clat_p99_ns": p.read_clat_p99_ns,
+            "write_clat_p99_ns": p.write_clat_p99_ns,
+        }
+        by_round.setdefault(rnd, []).append(cell)
+
+    rounds_summary: list[dict] = []
+    observations: list[RoundObservation] = []
+    for rnd in sorted(by_round.keys()):
+        cells = by_round[rnd]
+        canonical = next(
+            (c for c in cells if c["block_size_label"] == "4k" and c["rwmix_write_pct"] == 100),
+            None,
+        )
+        metric_value = canonical["write_iops"] if canonical else None
+        rounds_summary.append(
+            {
+                "round_idx": rnd,
+                "cells": cells,
+                "canonical_4k_100w_iops": metric_value,
+            }
+        )
+        if metric_value is not None:
+            observations.append(RoundObservation(round_idx=rnd, metric=float(metric_value)))
+
+    ss = evaluate_steady_state(observations)
+    return {
+        "run_id": run_id,
+        "profile": run.profile_name,
+        "rounds": rounds_summary,
+        "steady_state": {
+            "steady": ss.steady,
+            "reason": ss.reason,
+            "rounds_observed": ss.rounds_observed,
+            "window": ss.window,
+            "window_mean": ss.window_mean,
+            "window_range": ss.window_range,
+            "range_limit": ss.range_limit,
+            "range_ok": ss.range_ok,
+            "slope_per_round": ss.slope_per_round,
+            "slope_across_window": ss.slope_across_window,
+            "slope_limit": ss.slope_limit,
+            "slope_ok": ss.slope_ok,
+        },
     }

@@ -16,6 +16,7 @@ import {
 } from "@/components/TimeseriesChart";
 import { SweepChart } from "@/components/SweepChart";
 import { LatencyHistogramChart } from "@/components/LatencyHistogramChart";
+import { SniaAnalysisCard } from "@/components/SniaAnalysisCard";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -427,6 +428,8 @@ export default function RunDetail() {
       {(run.smart_before || run.smart_after) && (
         <SmartDiffCard smartBefore={run.smart_before} smartAfter={run.smart_after} />
       )}
+
+      {run.profile_name.startsWith("snia_") && <SniaAnalysisCard runId={run.id} />}
 
       <div className="card">
         <h3>{t("runs.phases")}</h3>

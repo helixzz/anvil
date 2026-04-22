@@ -335,6 +335,45 @@ export interface EnvironmentReport {
   checks: EnvironmentCheck[];
 }
 
+export interface SniaRoundCell {
+  phase_id: string;
+  phase_name: string;
+  block_size_label: string;
+  rwmix_write_pct: number;
+  iodepth: number;
+  numjobs: number;
+  runtime_s: number;
+  read_iops: number | null;
+  write_iops: number | null;
+  read_bw_bytes: number | null;
+  write_bw_bytes: number | null;
+  read_clat_p99_ns: number | null;
+  write_clat_p99_ns: number | null;
+}
+export interface SniaAnalysis {
+  run_id: string;
+  profile: string;
+  rounds: {
+    round_idx: number;
+    cells: SniaRoundCell[];
+    canonical_4k_100w_iops: number | null;
+  }[];
+  steady_state: {
+    steady: boolean;
+    reason: string;
+    rounds_observed: number;
+    window: number[];
+    window_mean: number | null;
+    window_range: number | null;
+    range_limit: number | null;
+    range_ok: boolean;
+    slope_per_round: number | null;
+    slope_across_window: number | null;
+    slope_limit: number | null;
+    slope_ok: boolean;
+  };
+}
+
 export const api = {
   status: () => jsonFetch<SystemStatus>("/api/status"),
   listDevices: () => jsonFetch<Device[]>("/api/devices"),
@@ -356,6 +395,10 @@ export const api = {
   getPhaseHistogram: (runId: string, phaseId: string) =>
     jsonFetch<PhaseHistogram>(
       `/api/runs/${encodeURIComponent(runId)}/phases/${encodeURIComponent(phaseId)}/histogram`,
+    ),
+  getSniaAnalysis: (runId: string) =>
+    jsonFetch<SniaAnalysis>(
+      `/api/runs/${encodeURIComponent(runId)}/snia-analysis`,
     ),
   createRun: (body: {
     device_id: string;

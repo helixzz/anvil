@@ -112,7 +112,16 @@
     "smartField": "Field",
     "smartBefore": "Before",
     "smartAfter": "After",
-    "smartDelta": "Δ"
+    "smartDelta": "Δ",
+    "sniaAnalysis": "SNIA PTS steady-state analysis",
+    "sniaHelp": "Per SNIA SSS-PTS v2.0.2 §7.2: steady state requires (max − min) ≤ 20% of mean AND linear-fit drift across the window ≤ 10% of mean, both evaluated on the 4 KiB 100%-write IOPS metric over the last 5 rounds.",
+    "sniaSteady": "Steady state reached",
+    "sniaIopsPerRound": "4 KiB 100%-write IOPS per round",
+    "sniaMetric": "Metric",
+    "sniaRangeBand": "Range tolerance",
+    "sniaCriterion": "Criterion",
+    "sniaObserved": "Observed",
+    "sniaLimit": "Limit"
   },
   "newRun": {
     "title": "Start a new benchmark",

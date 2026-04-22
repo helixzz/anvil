@@ -8,6 +8,42 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.5.0 — 2026-04-22
+
+### Added
+- **SNIA SSS PTS v2.0.2 steady-state analysis**. New module
+  `backend/anvil/profiles/snia.py` implements `evaluate_steady_state()`:
+  takes the last 5 round observations of the canonical 4 KiB 100 %
+  write IOPS metric and applies the spec's two simultaneous
+  criteria — `range ≤ 20 % × mean` and `|slope| × window_span ≤ 10 %
+  × mean`. Pure math, 8 pytest cases covering flat / range-violation /
+  slope-violation / sliding-window / degenerate / custom-threshold
+  paths. Spec references baked into the module docstring so tolerances
+  can't silently drift.
+- **`snia_quick_pts` benchmark profile**. 5 rounds × (3 block sizes ×
+  3 R/W mixes) = 45 cells at 45 s each plus a 60 s sequential-write
+  preconditioning pass. ~35 min total, destructive. Cells are named
+  `snia_r<round>_bs<bs>_w<writePct>` so the analysis endpoint can
+  parse the round structure back out deterministically.
+- **`GET /api/runs/{id}/snia-analysis`**. Groups a run's completed
+  phases by round, extracts the canonical metric, runs
+  `evaluate_steady_state`, and returns both the full round-by-round
+  matrix and the steady-state verdict (steady flag, range/slope
+  diagnostics, reason code).
+- **SNIA analysis card on Run detail**. Auto-renders whenever the run
+  profile name starts with `snia_`. Shows the canonical IOPS metric
+  as a line chart across rounds with ±20 % tolerance band, a verdict
+  badge (steady / range_exceeded / slope_exceeded / warming_up), and
+  a criteria table with observed vs limit values per criterion.
+
+### Notes
+- This cycle ships a fully-static 5-round SNIA profile, not the
+  adaptive run-rounds-until-convergence loop described in the design
+  doc. Adaptive SNIA requires rewriting the orchestrator's phase
+  iteration to consume tracker output mid-run; that work belongs in a
+  follow-up cycle. The math core shipped here is reusable for that
+  future adaptive runner — it's deliberately isolated from any I/O.
+
 ## 0.4.0 — 2026-04-22
 
 ### Added
