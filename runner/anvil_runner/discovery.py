@@ -55,6 +55,38 @@ class DiscoveredDevice:
         }
 
 
+_HOST_NSENTER: list[str] | None = None
+
+
+def _host_ns_prefix() -> list[str]:
+    """Prefix subprocess calls so they run in the host's mount namespace.
+
+    The runner container declares `pid: host`, so PID 1 is the host init. Using
+    `nsenter -t 1 -m` re-enters init's mount namespace, which is the host's
+    root view of `/proc/self/mounts`, `/proc/self/mountinfo`, etc. Without
+    this, lsblk and findmnt inside the container see only the container's
+    bind-mounts and the system-disk guard silently passes through.
+
+    Probed lazily: if `nsenter` is unavailable or `/proc/1/ns/mnt` can't be
+    opened (e.g. bare-metal dev host not running in a container at all), the
+    probe returns an empty prefix, and the commands just run in the current
+    namespace, which is correct for that case.
+    """
+    global _HOST_NSENTER
+    if _HOST_NSENTER is not None:
+        return _HOST_NSENTER
+    mnt_ns = Path("/proc/1/ns/mnt")
+    try:
+        if mnt_ns.exists():
+            mnt_ns.resolve(strict=True)
+            _HOST_NSENTER = ["nsenter", "-t", "1", "-m", "--"]
+            return _HOST_NSENTER
+    except (OSError, PermissionError):
+        pass
+    _HOST_NSENTER = []
+    return _HOST_NSENTER
+
+
 async def _run_cmd(*args: str, timeout: float = 15.0) -> tuple[int, str, str]:
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -76,8 +108,29 @@ async def _run_cmd(*args: str, timeout: float = 15.0) -> tuple[int, str, str]:
     )
 
 
+async def _run_host(*args: str, timeout: float = 15.0) -> tuple[int, str, str]:
+    """Run a command in the host mount namespace (falls back to local namespace)."""
+    prefix = _host_ns_prefix()
+    cmd = (*prefix, *args) if prefix else args
+    rc, out, err = await _run_cmd(*cmd, timeout=timeout)
+    if prefix and rc == 127:
+        rc, out, err = await _run_cmd(*args, timeout=timeout)
+    return rc, out, err
+
+
+def _read_host_proc_lines(name: str) -> list[str]:
+    """Read /proc/1/<name> first (host view via pid=host), then /proc/<name>."""
+    for candidate in (f"/proc/1/{name}", f"/proc/{name}"):
+        try:
+            with open(candidate) as f:
+                return f.readlines()
+        except (FileNotFoundError, PermissionError):
+            continue
+    return []
+
+
 async def _root_source() -> str | None:
-    rc, out, _ = await _run_cmd("findmnt", "-n", "-o", "SOURCE", "/")
+    rc, out, _ = await _run_host("findmnt", "-n", "-o", "SOURCE", "/")
     if rc != 0:
         return None
     src = out.strip()
@@ -89,7 +142,7 @@ async def _root_source() -> str | None:
 
 
 async def _parent_kname_for(src: str) -> str | None:
-    rc, out, _ = await _run_cmd("lsblk", "-ndo", "PKNAME", src)
+    rc, out, _ = await _run_host("lsblk", "-ndo", "PKNAME", src)
     if rc != 0:
         return None
     parent = out.strip()
@@ -110,34 +163,26 @@ async def _holders_for(kname: str) -> set[str]:
 
 async def _swap_sources() -> set[str]:
     sources: set[str] = set()
-    try:
-        with open("/proc/swaps") as f:
-            for idx, line in enumerate(f):
-                if idx == 0:
-                    continue
-                parts = line.split()
-                if parts:
-                    sources.add(parts[0])
-    except FileNotFoundError:
-        return sources
+    for idx, line in enumerate(_read_host_proc_lines("swaps")):
+        if idx == 0:
+            continue
+        parts = line.split()
+        if parts:
+            sources.add(parts[0])
     return sources
 
 
 async def _mount_sources() -> set[str]:
     sources: set[str] = set()
-    try:
-        with open("/proc/mounts") as f:
-            for line in f:
-                parts = line.split()
-                if parts:
-                    sources.add(parts[0])
-    except FileNotFoundError:
-        return sources
+    for line in _read_host_proc_lines("mounts"):
+        parts = line.split()
+        if parts:
+            sources.add(parts[0])
     return sources
 
 
 async def _lsblk_tree() -> dict[str, Any]:
-    rc, out, err = await _run_cmd(
+    rc, out, err = await _run_host(
         "lsblk",
         "-J",
         "-b",
