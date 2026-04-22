@@ -18,6 +18,7 @@ import { SweepChart } from "@/components/SweepChart";
 import { LatencyHistogramChart } from "@/components/LatencyHistogramChart";
 import { SniaAnalysisCard } from "@/components/SniaAnalysisCard";
 import { PcieLinkCard, type PcieLinkData } from "@/components/PcieLinkCard";
+import { ShareButton } from "@/components/ShareButton";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -262,7 +263,7 @@ export default function RunDetail() {
               </button>
             </div>
           )}
-          <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
             <a
               href={`/api/runs/${encodeURIComponent(run.id)}/export.html?token=${encodeURIComponent(getToken() ?? "")}`}
               target="_blank"
@@ -277,6 +278,7 @@ export default function RunDetail() {
             >
               <button>{t("runs.exportJson")}</button>
             </a>
+            <ShareButton runId={run.id} />
           </div>
         </div>
       </div>

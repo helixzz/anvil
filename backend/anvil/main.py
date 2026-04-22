@@ -13,10 +13,12 @@ from anvil import __version__
 from anvil.api import require_bearer
 from anvil.api.auth import admin_router
 from anvil.api.auth import router as auth_router
+from anvil.api.comparisons import router as comparisons_router
 from anvil.api.dashboard import router as dashboard_router
 from anvil.api.devices import router as devices_router
 from anvil.api.environment import router as environment_router
 from anvil.api.models import router as models_router
+from anvil.api.public import router as public_router
 from anvil.api.runs import router as runs_router
 from anvil.api.ws import router as ws_router
 from anvil.auth import hash_password
@@ -108,7 +110,9 @@ app.include_router(runs_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
 app.include_router(environment_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(comparisons_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(public_router)
 app.include_router(ws_router)
 
 

@@ -169,12 +169,21 @@ def _timeseries_svg(
     """
 
 
+def _redact_serial(serial: str | None) -> str:
+    if not serial:
+        return "—"
+    if len(serial) <= 4:
+        return "••••"
+    return "•" * (len(serial) - 4) + serial[-4:]
+
+
 def render_run_html(
     *,
     run: dict[str, Any],
     phases: list[dict[str, Any]],
     timeseries: list[dict[str, Any]],
     device: dict[str, Any] | None,
+    redact: bool = False,
 ) -> str:
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     title = f"Anvil Run Report — {run['id']}"
@@ -215,11 +224,12 @@ def render_run_html(
 
     device_block = ""
     if device:
+        serial_display = _redact_serial(device.get("serial")) if redact else (device.get("serial", "—") or "—")
         device_block = f"""
         <h2>Device under test</h2>
         <table class="kv">
           <tr><th>Model</th><td class="mono">{device.get('model', '—')}</td></tr>
-          <tr><th>Serial</th><td class="mono">{device.get('serial', '—')}</td></tr>
+          <tr><th>Serial</th><td class="mono">{serial_display}</td></tr>
           <tr><th>Firmware</th><td class="mono">{device.get('firmware') or '—'}</td></tr>
           <tr><th>Vendor</th><td class="mono">{device.get('vendor') or '—'}</td></tr>
           <tr><th>Protocol</th><td class="mono">{device.get('protocol', '—')}</td></tr>

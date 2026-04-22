@@ -8,6 +8,59 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.13.0 — 2026-04-23
+
+### Added
+- **Public share links for runs**. Operators and admins can generate a
+  revocable, redacted-serial public URL for any run via the Share
+  button on the Run Detail page:
+  - `POST /api/runs/{id}/share` generates (or rotates) a 128-bit
+    url-safe slug.
+  - `DELETE /api/runs/{id}/share` revokes the slug — the URL stops
+    working immediately.
+  - `GET /api/runs/{id}/share` reports the current slug (viewer-readable).
+  - `GET /r/runs/{slug}` serves an unauthenticated HTML report
+    identical to the private HTML export but with the device serial
+    masked (last 4 chars visible). Responses carry `X-Robots-Tag:
+    noindex` to keep shared runs out of search engines.
+- **Saved comparisons** with shareable links. New `saved_comparisons`
+  table lets operators name a selection of runs and revisit / share it:
+  - `GET  /api/comparisons` — list all saved comparisons.
+  - `POST /api/comparisons` — create (operator+admin).
+  - `GET  /api/comparisons/{id}` — fetch one.
+  - `PUT  /api/comparisons/{id}` — update (operator+admin).
+  - `DELETE /api/comparisons/{id}` — delete (operator+admin).
+  - `POST /api/comparisons/{id}/share` / `DELETE .../share` —
+    generate or revoke the public slug.
+  - `GET /r/compare/{slug}` — public, serial-redacted multi-run
+    report that stitches together one redacted run section per run ID.
+- **Slug helpers** in the new `anvil.shares` module: 128-bit
+  `secrets.token_urlsafe(16)` slugs with a unique index per column to
+  guarantee no collisions at scale.
+- **Nginx routing** for the new public path: `/r/` is proxied to the
+  API service with standard forwarded headers and a 60s read timeout
+  (no long-poll semantics needed; reports are one-shot).
+
+### Changed
+- `render_run_html()` now takes a `redact: bool = False` parameter.
+  When true, device serials are masked via `_redact_serial()` (all but
+  last 4 characters replaced with bullets); the public share endpoint
+  always renders with `redact=True`.
+
+### Migrations
+- **`20260423_0004_share_slugs`** — adds `runs.share_slug`
+  (nullable, unique index) and creates the `saved_comparisons` table
+  with its own `share_slug` unique index and a nullable
+  `created_by` FK to `users.id` with `ON DELETE SET NULL`.
+
+### Notes
+- Share slugs are opaque random tokens, not sequential IDs; an attacker
+  cannot enumerate shared runs. Revocation is immediate (the slug is
+  nulled; the URL 404s on the next request).
+- A shared run's chart axes, phase table, and time-series data are
+  included verbatim — only the device serial is redacted. If you
+  consider model name or firmware sensitive, do not share publicly.
+
 ## 0.12.1 — 2026-04-23
 
 ### Fixed

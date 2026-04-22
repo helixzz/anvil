@@ -599,6 +599,20 @@ export const api = {
     jsonFetch<ActivityTimeline>(`/api/dashboard/activity?days=${days}`),
   alarms: (hours = 24) =>
     jsonFetch<AlarmEntry[]>(`/api/dashboard/alarms?hours=${hours}`),
+  getRunShare: (id: string) =>
+    jsonFetch<{ run_id: string; share_slug: string | null }>(
+      `/api/runs/${encodeURIComponent(id)}/share`,
+    ),
+  createRunShare: (id: string) =>
+    jsonFetch<{ run_id: string; share_slug: string }>(
+      `/api/runs/${encodeURIComponent(id)}/share`,
+      { method: "POST" },
+    ),
+  revokeRunShare: (id: string) =>
+    jsonFetch<{ run_id: string; share_slug: null }>(
+      `/api/runs/${encodeURIComponent(id)}/share`,
+      { method: "DELETE" },
+    ),
 };
 
 export function wsUrl(path: string): string {

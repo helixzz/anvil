@@ -18,6 +18,7 @@ from anvil.profiles import get_profile, list_profiles
 from anvil.profiles.snia import RoundObservation, evaluate_steady_state
 from anvil.reports import render_run_html, render_run_json_bundle
 from anvil.schemas import MetricPoint, ProfileOut, RunCreate, RunOut, RunSummary
+from anvil.shares import generate_slug
 
 router = APIRouter(prefix="/runs", tags=["runs"], dependencies=[Depends(require_bearer)])
 
@@ -482,3 +483,37 @@ async def export_run_json(
             "Content-Disposition": f'attachment; filename="anvil-run-{run_id}.json"',
         },
     )
+
+
+@router.get("/{run_id}/share")
+async def get_run_share(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> dict:
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    return {"run_id": run.id, "share_slug": run.share_slug}
+
+
+@router.post("/{run_id}/share", dependencies=[Depends(require_operator)])
+async def create_run_share(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> dict:
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    run.share_slug = generate_slug()
+    await session.commit()
+    return {"run_id": run.id, "share_slug": run.share_slug}
+
+
+@router.delete("/{run_id}/share", dependencies=[Depends(require_operator)])
+async def revoke_run_share(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> dict:
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    run.share_slug = None
+    await session.commit()
+    return {"run_id": run.id, "share_slug": None}

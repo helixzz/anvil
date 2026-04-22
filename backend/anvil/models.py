@@ -101,6 +101,7 @@ class Run(Base):
     env_before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     env_after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     device_path_at_run: Mapped[str] = mapped_column(String(256), nullable=False)
+    share_slug: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
 
     device: Mapped[Device] = relationship(back_populates="runs")
     phases: Mapped[list[RunPhase]] = relationship(
@@ -210,3 +211,20 @@ class AppSetting(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
+
+
+class SavedComparison(Base):
+    __tablename__ = "saved_comparisons"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    run_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    share_slug: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        _tz_datetime, default=utcnow, onupdate=utcnow, nullable=False
+    )
