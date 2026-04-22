@@ -212,6 +212,27 @@
     "onlyIssues": "只显示问题项",
     "noneInCategory": "当前筛选条件下无检查项。"
   },
+  "tune": {
+    "title": "一键调优",
+    "help": "管理员可用。将 CPU governor 设为 performance、PCIe ASPM 设为 performance、NVMe I/O 调度器设为 none、队列深度设为 2048、预读设为 128 KiB。事务式执行：任意一个写入失败将自动回滚之前所有成功的写入。下方回执也支持手动回滚。",
+    "applyBtn": "应用推荐调优",
+    "applyConfirm": "将以管理员身份写入宿主 sysfs（CPU governor、PCIe ASPM、块调度器、nr_requests、预读）。正在进行的基准测试的环境会发生变化。确认继续？",
+    "revertBtn": "回滚上次调优",
+    "revertConfirm": "将上次 Apply 的每一项变更回滚？",
+    "revertedReceipt": "回滚回执",
+    "appliedReceipt": "应用回执",
+    "key": "调优项",
+    "path": "sysfs 路径",
+    "current": "当前",
+    "desired": "期望",
+    "before": "修改前",
+    "after": "修改后",
+    "change": "变更",
+    "willChange": "将变更",
+    "alreadyOk": "已达标",
+    "ok": "ok",
+    "revertError": "回滚错误"
+  },
   "compare": {
     "title": "跨型号对比",
     "subtitle": "选择两个及以上至少共享过一个基准测试阶段的型号，针对指定指标叠加对比。",

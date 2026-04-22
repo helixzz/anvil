@@ -336,6 +336,32 @@ export interface EnvironmentReport {
   checks: EnvironmentCheck[];
 }
 
+export interface TunePreviewEntry {
+  key: string;
+  category?: string;
+  path?: string;
+  desired?: string;
+  current?: string | null;
+  will_change?: boolean;
+  description?: string;
+  error?: string;
+}
+
+export interface TuneResult {
+  key: string;
+  path: string;
+  before: string | null;
+  after: string | null;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface TuneReceipt {
+  results: TuneResult[];
+  reverted: boolean;
+  revert_error?: string | null;
+}
+
 export interface FleetStats {
   device_count: number;
   testable_device_count: number;
@@ -526,6 +552,20 @@ export const api = {
       `/api/models/compare?slugs=${encodeURIComponent(slugs.join(","))}&phase_name=${encodeURIComponent(phase_name)}`,
     ),
   getEnvironment: () => jsonFetch<EnvironmentReport>("/api/environment"),
+  tunePreview: (keys?: string[]) => {
+    const qs = keys && keys.length ? `?keys=${encodeURIComponent(keys.join(","))}` : "";
+    return jsonFetch<{ preview: TunePreviewEntry[] }>(`/api/environment/tune/preview${qs}`);
+  },
+  tuneApply: (keys?: string[] | null) =>
+    jsonFetch<TuneReceipt>(`/api/environment/tune/apply`, {
+      method: "POST",
+      body: JSON.stringify({ keys: keys ?? null }),
+    }),
+  tuneRevert: (results: TuneResult[]) =>
+    jsonFetch<TuneReceipt>(`/api/environment/tune/revert`, {
+      method: "POST",
+      body: JSON.stringify({ results }),
+    }),
   fleetStats: () => jsonFetch<FleetStats>("/api/dashboard/fleet-stats"),
   leaderboards: (limit = 5) =>
     jsonFetch<Leaderboards>(`/api/dashboard/leaderboards?limit=${limit}`),

@@ -212,6 +212,27 @@
     "onlyIssues": "Show issues only",
     "noneInCategory": "No checks match the current filter."
   },
+  "tune": {
+    "title": "One-click auto-tune",
+    "help": "Admin-only. Flips CPU governor to 'performance', PCIe ASPM to 'performance', NVMe I/O scheduler to 'none', queue depth to 2048, and read-ahead to 128 KiB — every tunable is transactional: if any single write fails the runner reverts every earlier successful write automatically. The receipt below lets you explicitly revert later.",
+    "applyBtn": "Apply recommended tuning",
+    "applyConfirm": "This will write to host sysfs (CPU governor, PCIe ASPM, block scheduler, nr_requests, read-ahead) on behalf of the admin user. Any in-flight benchmark may see its environment change. Proceed?",
+    "revertBtn": "Revert last tune",
+    "revertConfirm": "Revert every change from the last apply?",
+    "revertedReceipt": "Revert receipt",
+    "appliedReceipt": "Apply receipt",
+    "key": "Knob",
+    "path": "sysfs path",
+    "current": "Current",
+    "desired": "Desired",
+    "before": "Before",
+    "after": "After",
+    "change": "Change",
+    "willChange": "will change",
+    "alreadyOk": "already ok",
+    "ok": "ok",
+    "revertError": "Revert error"
+  },
   "compare": {
     "title": "Cross-model comparison",
     "subtitle": "Pick two or more device models that share at least one benchmark phase, then overlay their results for a specific metric.",

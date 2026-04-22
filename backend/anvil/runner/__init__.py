@@ -52,6 +52,15 @@ class RunnerClient:
     async def environment(self) -> dict[str, Any]:
         return await self._call("environment", {}, timeout=60.0)
 
+    async def tune_preview(self, keys: list[str] | None = None) -> dict[str, Any]:
+        return await self._call("tune_preview", {"keys": keys}, timeout=30.0)
+
+    async def tune_apply(self, keys: list[str] | None = None) -> dict[str, Any]:
+        return await self._call("tune_apply", {"keys": keys}, timeout=60.0)
+
+    async def tune_revert(self, results: list[dict[str, Any]]) -> dict[str, Any]:
+        return await self._call("tune_revert", {"results": results}, timeout=60.0)
+
     async def _call(
         self, method: str, params: dict[str, Any], timeout: float = 30.0
     ) -> dict[str, Any]:

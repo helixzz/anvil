@@ -11,6 +11,7 @@ import structlog
 from anvil_runner.devices import lsblk_json, nvme_list, nvme_smart, read_smart, smartctl_all
 from anvil_runner.discovery import discover as discover_devices
 from anvil_runner.env import environment_report
+from anvil_runner.env_tune import apply as tune_apply, preview as tune_preview, revert as tune_revert
 from anvil_runner.fio import FioRunner, PhaseRequest
 
 
@@ -78,6 +79,27 @@ async def run_server(socket_path: Path, simulation: bool = False) -> asyncio.Abs
                 writer.write(json.dumps(
                     {"id": req_id, "result": {"checks": checks}}
                 ).encode() + b"\n")
+                await writer.drain()
+                return
+
+            if method == "tune_preview":
+                keys = params.get("keys") or None
+                result = tune_preview(keys)
+                writer.write(json.dumps({"id": req_id, "result": {"preview": result}}).encode() + b"\n")
+                await writer.drain()
+                return
+
+            if method == "tune_apply":
+                keys = params.get("keys") or None
+                receipt = tune_apply(keys)
+                writer.write(json.dumps({"id": req_id, "result": receipt.as_dict()}).encode() + b"\n")
+                await writer.drain()
+                return
+
+            if method == "tune_revert":
+                receipt_results = params.get("results") or []
+                receipt = tune_revert(receipt_results)
+                writer.write(json.dumps({"id": req_id, "result": receipt.as_dict()}).encode() + b"\n")
                 await writer.drain()
                 return
 

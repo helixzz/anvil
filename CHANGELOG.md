@@ -8,6 +8,44 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.10.0 — 2026-04-22
+
+### Added
+- **One-click environment auto-tune (admin-only)**. New runner module
+  `anvil_runner/env_tune.py` writes an explicit allow-list of host
+  sysfs paths via `/proc/1/root/sys/...`:
+  - `cpu_governor` → `performance` (all cores)
+  - `pcie_aspm_policy` → `performance`
+  - `nvme_scheduler` → `none` (all NVMe namespaces)
+  - `nvme_nr_requests` → `2048`
+  - `nvme_read_ahead_kb` → `128`
+  Every tunable has a human-readable description baked into the module
+  so the UI can render the preview table without any frontend-side
+  lookup table.
+- **Transactional apply**. The `apply()` function records a per-path
+  before/after receipt. If any write raises `OSError`, every previously-
+  successful write in the batch is reverted automatically in reverse
+  order. The receipt is returned to the caller so they can pass it back
+  to `revert()` later for a deterministic undo.
+- **New backend endpoints** under `/api/environment/tune/`:
+  - `GET /preview` — dry-run: which paths would change to which values.
+  - `POST /apply` — admin-only, returns the receipt + audits to
+    `audit_log`.
+  - `POST /revert` — admin-only, replays `before` values from a prior
+    receipt.
+- **New runner RPC methods**: `tune_preview`, `tune_apply`,
+  `tune_revert` over the existing UDS JSON-RPC channel.
+- **System page Auto-tune card** (admin-only). Shows a preview table
+  of every tunable path with current vs desired and a "will change" /
+  "already ok" badge. Apply and Revert buttons. After apply, the
+  receipt renders with before / after / ok for every path, including
+  any revert_error from a partial rollback.
+
+### Changed
+- `/system` now refetches its environment report automatically after
+  a successful apply / revert so you can see the checks flip from
+  warn → pass without reloading.
+
 ## 0.9.0 — 2026-04-22
 
 ### Added

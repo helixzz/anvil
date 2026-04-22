@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { api, type EnvironmentCheck } from "@/api";
+import { api, type EnvironmentCheck, type TuneReceipt } from "@/api";
 
 const STATUS_BADGE: Record<string, string> = {
   pass: "badge-ok",
@@ -20,6 +20,35 @@ export default function System() {
   const { t } = useTranslation();
   const q = useQuery({ queryKey: ["environment"], queryFn: api.getEnvironment });
   const [onlyIssues, setOnlyIssues] = useState(false);
+
+  const meQ = useQuery({ queryKey: ["whoami"], queryFn: api.whoami });
+  const isAdmin = meQ.data?.role === "admin" || meQ.data?.is_token;
+
+  const [lastReceipt, setLastReceipt] = useState<TuneReceipt | null>(null);
+
+  const preview = useQuery({
+    queryKey: ["tune-preview"],
+    queryFn: () => api.tunePreview(),
+    enabled: isAdmin,
+  });
+
+  const applyMut = useMutation({
+    mutationFn: () => api.tuneApply(null),
+    onSuccess: (r) => {
+      setLastReceipt(r);
+      void q.refetch();
+      void preview.refetch();
+    },
+  });
+
+  const revertMut = useMutation({
+    mutationFn: () => (lastReceipt ? api.tuneRevert(lastReceipt.results) : Promise.reject()),
+    onSuccess: (r) => {
+      setLastReceipt(r);
+      void q.refetch();
+      void preview.refetch();
+    },
+  });
 
   const grouped = useMemo(() => {
     const groups: Record<string, EnvironmentCheck[]> = {};
@@ -94,6 +123,115 @@ export default function System() {
               </div>
             </div>
           </div>
+
+          {isAdmin && (
+            <div
+              className="card"
+              style={{ borderColor: "#78350f", background: "rgba(66, 32, 6, 0.35)" }}
+            >
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+                <h3 style={{ margin: 0, color: "#fde68a" }}>
+                  ⚙ {t("tune.title")}
+                </h3>
+                <div className="row" style={{ gap: 8 }}>
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      if (window.confirm(t("tune.applyConfirm"))) applyMut.mutate();
+                    }}
+                    disabled={applyMut.isPending}
+                  >
+                    {applyMut.isPending ? t("common.loading") : t("tune.applyBtn")}
+                  </button>
+                  <button
+                    className="btn-danger"
+                    disabled={!lastReceipt || revertMut.isPending}
+                    onClick={() => {
+                      if (window.confirm(t("tune.revertConfirm"))) revertMut.mutate();
+                    }}
+                  >
+                    {revertMut.isPending ? t("common.loading") : t("tune.revertBtn")}
+                  </button>
+                </div>
+              </div>
+              <div className="dim" style={{ fontSize: 11, marginTop: 6, marginBottom: 10 }}>
+                {t("tune.help")}
+              </div>
+              {preview.data && preview.data.preview.length > 0 && (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t("tune.key")}</th>
+                      <th>{t("tune.path")}</th>
+                      <th>{t("tune.current")}</th>
+                      <th>{t("tune.desired")}</th>
+                      <th>{t("tune.change")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.data.preview.map((p, i) => (
+                      <tr key={`${p.key}-${i}-${p.path}`}>
+                        <td className="mono" style={{ fontSize: 12 }}>{p.key}</td>
+                        <td className="mono dim" style={{ fontSize: 11 }}>{p.path ?? "—"}</td>
+                        <td className="mono">{p.current ?? "—"}</td>
+                        <td className="mono">{p.desired ?? "—"}</td>
+                        <td>
+                          {p.will_change ? (
+                            <span className="badge badge-warn">{t("tune.willChange")}</span>
+                          ) : (
+                            <span className="badge badge-ok">{t("tune.alreadyOk")}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {lastReceipt && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 12, marginBottom: 6 }}>
+                    {lastReceipt.reverted ? t("tune.revertedReceipt") : t("tune.appliedReceipt")}
+                  </div>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t("tune.key")}</th>
+                        <th>{t("tune.path")}</th>
+                        <th>{t("tune.before")}</th>
+                        <th>{t("tune.after")}</th>
+                        <th>{t("tune.ok")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lastReceipt.results.map((r, i) => (
+                        <tr key={`${r.key}-${i}-${r.path}`}>
+                          <td className="mono" style={{ fontSize: 12 }}>{r.key}</td>
+                          <td className="mono dim" style={{ fontSize: 11 }}>{r.path}</td>
+                          <td className="mono">{r.before ?? "—"}</td>
+                          <td className="mono">{r.after ?? "—"}</td>
+                          <td>
+                            <span className={`badge ${r.ok ? "badge-ok" : "badge-err"}`}>
+                              {r.ok ? "ok" : "fail"}
+                            </span>
+                            {r.error && (
+                              <span className="dim mono" style={{ fontSize: 10, marginLeft: 6 }}>
+                                {r.error}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {lastReceipt.revert_error && (
+                    <div className="badge badge-err" style={{ marginTop: 8 }}>
+                      {t("tune.revertError")}: {lastReceipt.revert_error}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {Object.keys(grouped).length === 0 ? (
             <div className="card dim">{t("system.noneInCategory")}</div>
