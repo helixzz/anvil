@@ -20,9 +20,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import bcrypt
 import jwt
 from fastapi import Depends, Header, HTTPException, status
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,8 @@ from anvil.config import Settings, get_settings
 from anvil.db import get_session
 from anvil.models import User, UserRole
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+BCRYPT_MAX_PASSWORD_BYTES = 72
+BCRYPT_ROUNDS = 12
 
 ROLE_ORDER = {
     UserRole.VIEWER.value: 1,
@@ -80,14 +81,24 @@ class Principal:
         return self.role_rank() >= need
 
 
+def _safe_password_bytes(plain: str) -> bytes:
+    """bcrypt rejects inputs > 72 bytes. Truncate rather than raise so a very
+    long password (or a bearer-token-derived bootstrap password with multi-
+    byte UTF-8 chars) still produces a deterministic hash."""
+    return plain.encode("utf-8")[:BCRYPT_MAX_PASSWORD_BYTES]
+
+
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(
+        _safe_password_bytes(plain),
+        bcrypt.gensalt(rounds=BCRYPT_ROUNDS),
+    ).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
-        return pwd_context.verify(plain, hashed)
-    except Exception:
+        return bcrypt.checkpw(_safe_password_bytes(plain), hashed.encode("utf-8"))
+    except (ValueError, TypeError):
         return False
 
 
