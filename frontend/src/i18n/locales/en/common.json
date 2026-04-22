@@ -233,5 +233,24 @@
     "speedDowngraded": "speed downgraded",
     "widthDowngraded": "width downgraded",
     "address": "PCIe address"
+  },
+  "dashboard": {
+    "testableDevices": "Testable drives",
+    "brandsSeen": "Brands seen",
+    "totalRuns": "Total runs",
+    "bytesWritten": "Written ≈",
+    "approxBw": "sum of (write BW × runtime) across complete runs",
+    "models": "models",
+    "envHealth": "Environment",
+    "pass": "pass",
+    "recentRuns": "Recent runs",
+    "activity": "Run activity (last 30 days)",
+    "device": "Device",
+    "value": "Value",
+    "noData": "No data yet",
+    "pcieDegradedTitle": "PCIe link-degraded drives",
+    "pcieDegradedHelp": "These drives are running at a PCIe speed or width below their capability. Benchmarks on them will under-report the drive's real peak performance.",
+    "alarmsTitle": "Recent alarms (last 24 h)",
+    "alarmsHelp": "Runs that ended in failure or abort. Thermal-abort reasons include a temperature threshold + consecutive-samples message in error_message."
   }
 }

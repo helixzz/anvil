@@ -336,6 +336,70 @@ export interface EnvironmentReport {
   checks: EnvironmentCheck[];
 }
 
+export interface FleetStats {
+  device_count: number;
+  testable_device_count: number;
+  distinct_models: number;
+  distinct_brands: number;
+  total_runs: number;
+  complete_runs: number;
+  failed_runs: number;
+  aborted_runs: number;
+  approx_bytes_written: number;
+}
+
+export interface LeaderboardEntry {
+  run_id: string;
+  device_id: string;
+  brand: string;
+  model: string;
+  finished_at: string | null;
+  value: number | null;
+  read_iops: number | null;
+  read_bw_bytes: number | null;
+  read_clat_mean_ns: number | null;
+  read_clat_p99_ns: number | null;
+}
+export interface LeaderboardCategory {
+  title: string;
+  metric: string;
+  entries: LeaderboardEntry[];
+}
+export type Leaderboards = Record<string, LeaderboardCategory>;
+
+export interface PcieDegradedEntry {
+  device_id: string;
+  brand: string;
+  model: string;
+  serial: string;
+  capability: Record<string, unknown> | null;
+  status: Record<string, unknown> | null;
+  speed_degraded: boolean;
+  width_degraded: boolean;
+}
+
+export interface ActivityDay {
+  day: string;
+  total: number;
+  complete: number;
+  failed: number;
+  aborted: number;
+}
+export interface ActivityTimeline {
+  days: number;
+  series: ActivityDay[];
+}
+
+export interface AlarmEntry {
+  run_id: string;
+  device_id: string;
+  model: string | null;
+  profile: string;
+  status: string;
+  finished_at: string | null;
+  error_message: string | null;
+}
+
 export interface SniaRoundCell {
   phase_id: string;
   phase_name: string;
@@ -425,6 +489,14 @@ export const api = {
       `/api/models/compare?slugs=${encodeURIComponent(slugs.join(","))}&phase_name=${encodeURIComponent(phase_name)}`,
     ),
   getEnvironment: () => jsonFetch<EnvironmentReport>("/api/environment"),
+  fleetStats: () => jsonFetch<FleetStats>("/api/dashboard/fleet-stats"),
+  leaderboards: (limit = 5) =>
+    jsonFetch<Leaderboards>(`/api/dashboard/leaderboards?limit=${limit}`),
+  pcieDegraded: () => jsonFetch<PcieDegradedEntry[]>("/api/dashboard/pcie-degraded"),
+  activity: (days = 30) =>
+    jsonFetch<ActivityTimeline>(`/api/dashboard/activity?days=${days}`),
+  alarms: (hours = 24) =>
+    jsonFetch<AlarmEntry[]>(`/api/dashboard/alarms?hours=${hours}`),
 };
 
 export function wsUrl(path: string): string {

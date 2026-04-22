@@ -233,5 +233,24 @@
     "speedDowngraded": "速率降级",
     "widthDowngraded": "位宽降级",
     "address": "PCIe 地址"
+  },
+  "dashboard": {
+    "testableDevices": "可测设备",
+    "brandsSeen": "品牌数",
+    "totalRuns": "总运行数",
+    "bytesWritten": "累计写入 ≈",
+    "approxBw": "所有完成运行的 (写带宽 × 时长) 之和",
+    "models": "个型号",
+    "envHealth": "系统环境",
+    "pass": "通过",
+    "recentRuns": "最近运行",
+    "activity": "运行活跃度（近 30 天）",
+    "device": "设备",
+    "value": "数值",
+    "noData": "暂无数据",
+    "pcieDegradedTitle": "PCIe 链路降级设备",
+    "pcieDegradedHelp": "这些设备当前运行的 PCIe 速率或位宽低于其能力，在其上做测试得到的成绩不能反映设备的真实峰值。",
+    "alarmsTitle": "近 24 小时告警",
+    "alarmsHelp": "失败或被中止的运行。若因高温被中止，error_message 中会包含温度阈值和连续样本数。"
   }
 }

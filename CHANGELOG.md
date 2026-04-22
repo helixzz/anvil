@@ -8,6 +8,38 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.8.0 — 2026-04-22
+
+### Added
+- **Redesigned dashboard** with 8 panels across two levels of storytelling:
+  operator (what's going wrong right now) + external-visitor (what the
+  lab has done). New panels:
+  - **KPI strip** (6 cards): testable drives / fleet size, brands seen,
+    total runs with ok/fail/aborted breakdown, cumulative approximate
+    bytes-written (Σ write BW × runtime), runner connection status with
+    coloured dot, environment health status with click-through to
+    `/system`.
+  - **PCIe-degraded drives alert** (highlighted yellow): any testable
+    device whose `LnkSta < LnkCap`. Direct link to the device detail
+    page for forensics.
+  - **Recent alarms** (highlighted red): runs that failed or were aborted
+    in the last 24 hours, with the `error_message` column so operators
+    can spot thermal-abort reasons at a glance.
+  - **30-day activity timeline**: stacked-bar chart of complete / failed /
+    aborted runs per day.
+  - **4 leaderboards**: top-5 by 4 K QD1 random read IOPS, top-5 by
+    4 K QD32 random read IOPS, top-5 by 1 MiB QD8 sequential read BW,
+    top-5 by 4 K QD32 random read p99 latency (lowest is best). Every
+    entry links both to the device detail page and the specific run.
+  - **Recent runs** (kept and polished): last 10 runs with click-through
+    to both run and device pages.
+
+### Added (backend)
+- New `/api/dashboard/*` endpoints powering the above: `fleet-stats`,
+  `leaderboards?limit=N`, `pcie-degraded`, `activity?days=N`,
+  `alarms?hours=N`. All are cheap aggregations; the dashboard page
+  parallelises them via TanStack Query.
+
 ## 0.7.1 — 2026-04-22
 
 ### Fixed
