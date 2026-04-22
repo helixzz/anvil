@@ -8,6 +8,50 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.11.0 — 2026-04-22
+
+### Added
+- **Admin-configurable SSO integration points**. New module
+  `anvil.sso` defines an IdP-agnostic policy layer: an `SsoConfig`
+  dataclass (enabled flag, IdP metadata URL, entity IDs, attribute
+  name overrides, default role, and a group→role mapping list) plus
+  `resolve_sso_role()` which takes the groups asserted by the IdP and
+  returns the highest matching Anvil role (admin > operator > viewer)
+  or the config's default role when nothing matches.
+- **`app_settings` table** via Alembic migration `20260422_0003`, for
+  JSONB config entries keyed by string. SSO config lives under key
+  `sso`; future app-level config can share the table.
+- **`provision_sso_user()`** upserts a User row for an SSO-authenticated
+  username, syncs the role from the current mapping on every login
+  (so role revocations propagate without manual cleanup), and never
+  sets a password hash — SSO-only users can't sign in via the
+  username+password form.
+- **New admin API endpoints**:
+  - `GET /api/auth/sso/config` — fetch current settings.
+  - `PUT /api/auth/sso/config` — save settings (validates every role
+    name against the UserRole enum).
+  - `POST /api/auth/sso/assertion` — consume a pre-validated assertion
+    (username + display_name + groups), provision the user, issue a
+    JWT. Guarded by the `enabled` flag: 403 if SSO is off. Crypto
+    validation is explicitly out of scope for this endpoint — it's
+    the hook point for a real SAML library integration, not a
+    self-contained IdP.
+- **`/admin/sso` page** (admin nav entry): form for every config field,
+  a group→role mapping editor (add/remove/reorder/edit rows), save
+  button with server-side validation surfacing, plus a "test
+  assertion" smoke-test panel so admins can verify their mapping
+  resolves to the expected role before connecting a real IdP.
+
+### Why this shape
+SAML parsing libraries (`python3-saml`, `pysaml2`) change APIs across
+versions and cover overlapping but distinct feature sets (AD FS vs
+Azure AD vs Okta vs Keycloak). The user asked to "reserve the SSO
+capability with interactive admin config", so this release ships the
+parts Anvil controls (storage, policy, admin UI) with a clean
+integration point for the IdP-specific crypto library. When a concrete
+library is chosen, only the `/auth/sso/assertion` handler is edited —
+`provision_sso_user()` and the mapping logic stay unchanged.
+
 ## 0.10.0 — 2026-04-22
 
 ### Added

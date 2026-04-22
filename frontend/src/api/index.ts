@@ -475,6 +475,20 @@ export interface AnvilUser {
   last_login_at: string | null;
 }
 
+export interface SsoConfig {
+  enabled: boolean;
+  idp_metadata_url: string;
+  idp_entity_id: string;
+  sp_entity_id: string;
+  sp_acs_url: string;
+  username_attribute: string;
+  display_name_attribute: string;
+  email_attribute: string;
+  groups_attribute: string;
+  default_role: string;
+  mappings: { group: string; role: string }[];
+}
+
 export const api = {
   status: () => jsonFetch<SystemStatus>("/api/status"),
   whoami: () =>
@@ -485,6 +499,17 @@ export const api = {
     jsonFetch<{ token: string; user: AnvilUser }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
+    }),
+  getSsoConfig: () => jsonFetch<SsoConfig>("/api/auth/sso/config"),
+  saveSsoConfig: (config: SsoConfig) =>
+    jsonFetch<SsoConfig>("/api/auth/sso/config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }),
+  ssoTestAssertion: (body: { username: string; display_name?: string | null; groups: string[] }) =>
+    jsonFetch<{ token: string; user: AnvilUser }>("/api/auth/sso/assertion", {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
   adminListUsers: () => jsonFetch<AnvilUser[]>("/api/admin/users"),
   adminCreateUser: (body: { username: string; password: string; display_name?: string; role: string }) =>

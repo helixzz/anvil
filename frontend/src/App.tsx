@@ -15,6 +15,7 @@ import ModelDetail from "@/pages/ModelDetail";
 import Compare from "@/pages/Compare";
 import System from "@/pages/System";
 import Users from "@/pages/Users";
+import Sso from "@/pages/Sso";
 
 function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -176,6 +177,7 @@ export default function App() {
         <NavLink to="/compare">{t("nav.compare")}</NavLink>
         <NavLink to="/system">{t("nav.system")}</NavLink>
         {isAdmin && <NavLink to="/admin/users">{t("nav.users")}</NavLink>}
+        {isAdmin && <NavLink to="/admin/sso">{t("nav.sso")}</NavLink>}
         <NavLink to="/runs/new">{t("nav.newRun")}</NavLink>
         <div style={{ marginTop: "auto", paddingTop: 16 }} className="col">
           <div className="dim" style={{ fontSize: 12 }}>
@@ -230,6 +232,7 @@ export default function App() {
           <Route path="/compare" element={<Compare />} />
           <Route path="/system" element={<System />} />
           {isAdmin && <Route path="/admin/users" element={<Users />} /> }
+          {isAdmin && <Route path="/admin/sso" element={<Sso />} /> }
           <Route
             path="*"
             element={

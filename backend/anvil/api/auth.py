@@ -20,6 +20,13 @@ from anvil.auth import (
 from anvil.config import Settings, get_settings
 from anvil.db import get_session
 from anvil.models import AuditLog, User, UserRole
+from anvil.sso import (
+    GroupRoleMapping,
+    SsoConfig,
+    load_sso_config,
+    provision_sso_user,
+    save_sso_config,
+)
 
 router = APIRouter(tags=["auth"])
 
@@ -207,3 +214,138 @@ async def delete_user(
     )
     await session.commit()
     return {"deleted": user.id}
+
+
+class MappingEntry(BaseModel):
+    group: str = Field(min_length=1, max_length=256)
+    role: str = Field(min_length=1, max_length=32)
+
+
+class SsoConfigRequest(BaseModel):
+    enabled: bool = False
+    idp_metadata_url: str = ""
+    idp_entity_id: str = ""
+    sp_entity_id: str = "anvil"
+    sp_acs_url: str = ""
+    username_attribute: str = "uid"
+    display_name_attribute: str = "displayName"
+    email_attribute: str = "mail"
+    groups_attribute: str = "memberOf"
+    default_role: str = UserRole.VIEWER.value
+    mappings: list[MappingEntry] = Field(default_factory=list)
+
+
+class SsoAssertionRequest(BaseModel):
+    """Development / test-only: accept already-validated assertion attributes.
+
+    In a production SAML flow the ACS endpoint receives an XML
+    AuthnResponse, validates its signature + NotOnOrAfter window + issuer,
+    and only then calls provision_sso_user with the extracted attributes.
+    This endpoint skips all of that and trusts the caller — it exists so
+    admins can exercise the group→role mapping + user-provisioning path
+    end-to-end before a full SAML library integration lands.
+    """
+
+    username: str = Field(min_length=1)
+    display_name: str | None = None
+    groups: list[str] = Field(default_factory=list)
+
+
+@router.get("/auth/sso/config")
+async def get_sso_config(
+    principal: Principal = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    config = await load_sso_config(session)
+    return config.as_dict()
+
+
+@router.put("/auth/sso/config")
+async def put_sso_config(
+    body: SsoConfigRequest,
+    principal: Principal = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    for m in body.mappings:
+        if m.role not in {r.value for r in UserRole}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"invalid role in mapping: {m.role}",
+            )
+    if body.default_role not in {r.value for r in UserRole}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"invalid default_role: {body.default_role}",
+        )
+    config = SsoConfig(
+        enabled=body.enabled,
+        idp_metadata_url=body.idp_metadata_url,
+        idp_entity_id=body.idp_entity_id,
+        sp_entity_id=body.sp_entity_id,
+        sp_acs_url=body.sp_acs_url,
+        username_attribute=body.username_attribute,
+        display_name_attribute=body.display_name_attribute,
+        email_attribute=body.email_attribute,
+        groups_attribute=body.groups_attribute,
+        default_role=body.default_role,
+        mappings=[GroupRoleMapping(group=m.group, role=m.role) for m in body.mappings],
+    )
+    await save_sso_config(session, config)
+    _audit(
+        session,
+        actor=principal.username,
+        action="sso_config_updated",
+        target=None,
+        details=config.as_dict(),
+    )
+    await session.commit()
+    return config.as_dict()
+
+
+@router.post("/auth/sso/assertion")
+async def sso_assertion(
+    body: SsoAssertionRequest,
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_session),
+) -> LoginResponse:
+    """Consume a (test-only) pre-validated SSO assertion and issue a JWT.
+
+    Guarded by the SSO config's `enabled` flag — if SSO isn't turned on
+    this endpoint rejects with 403 so a broken deploy can't accidentally
+    provision arbitrary users. When a real SAML library is wired up this
+    handler is where the assertion signature + notBefore/notOnOrAfter
+    checks get added; the provisioning + JWT issuance below stays
+    identical.
+    """
+    config = await load_sso_config(session)
+    if not config.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="SSO is not enabled. An admin must enable it in /auth/sso/config first.",
+        )
+    user = await provision_sso_user(
+        session,
+        username=body.username,
+        display_name=body.display_name,
+        groups=body.groups,
+        config=config,
+    )
+    await session.flush()
+    token = create_jwt(user, secret=settings.bearer_token)
+    _audit(
+        session,
+        actor=user.username,
+        action="sso_login",
+        target=user.id,
+        details={"groups": body.groups, "assigned_role": user.role},
+    )
+    await session.commit()
+    return LoginResponse(
+        token=token,
+        user={
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "display_name": user.display_name,
+        },
+    )

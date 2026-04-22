@@ -202,3 +202,11 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(_tz_datetime)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
