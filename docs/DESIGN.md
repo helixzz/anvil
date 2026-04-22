@@ -217,18 +217,45 @@ Entry-point based plugin system:
 
 ## 11. Roadmap
 
-1. **POC** (this codebase): discovery, Quick profile, live chart, saved report.
-2. **MVP**: SMART snapshots, environment validator (read-only), Standard
-   profile, comparison workbench.
-3. **SNIA / Endurance**: steady-state detection, WSAT, endurance profile,
-   thermal auto-pause.
-4. **Analytics**: fit scores, leaderboards, regression annotations, anomaly
-   detection.
-5. **Polish / extensibility**: custom visual profile builder, vendor plugins,
-   scheduled / recurring runs, remediation auto-apply with full rollback.
+Version history lives in [`../CHANGELOG.md`](../CHANGELOG.md).
+
+1. **POC (0.1.0, shipped)**: discovery, Quick profile, live WebSocket chart,
+   saved report.
+2. **Analytics foundation (0.2.0, shipped)**: runner-side SMART polling,
+   per-run time-series charts (IOPS/BW/lat/temperature) with phase-boundary
+   annotations, auto-derived block-size and queue-depth sweep charts, an
+   expanded 8-profile catalog covering read-only, destructive, and workload
+   presets, a model library (`/models`) with cross-run comparison charts and
+   stability/thermal scoring per model, host-namespace discovery for correct
+   system-disk exclusion, and nginx cache-control so fresh deploys take effect
+   immediately.
+3. **Steady-state & endurance**: true SNIA convergence loop driving a `snia_pts`
+   profile; endurance profile with thermal auto-pause; WSAT-style write
+   saturation tracking.
+4. **Environment validator**: read-only page surfacing every CPU-governor /
+   ASPM / irqbalance / block-layer / thermal check, with opt-in
+   auto-remediation wrapped in a revert-on-exit transaction.
+5. **Analytics II**: latency histograms from `fio json+` bins, cross-model
+   comparison workbench, workload-profile fit scores, anomaly detection.
+6. **Polish & extensibility**: custom visual profile builder, vendor-specific
+   SMART plugins (Intel / Samsung / WDC / Micron / …), scheduled recurring
+   runs, PDF / ODF / HTML report exports, shareable `/r/<slug>` public links.
 
 ## 12. Non-goals
 
 - Multi-tenant or public-internet deployment.
 - Cloud storage benchmarking (S3 / object / file-system only tests).
 - Replacement for vendor qualification suites.
+
+## 13. Versioning
+
+All three components (`backend/pyproject.toml`, `runner/pyproject.toml`,
+`frontend/package.json`) share a single version string and bump together. The
+Python `__version__` constants in `backend/anvil/__init__.py` and
+`runner/anvil_runner/__init__.py` must match, and the frontend surfaces both
+`api` and `web` versions in the sidebar so an operator can spot a stale cached
+bundle at a glance.
+
+Rule: every meaningful change (user-visible behaviour, schema, or material bug
+fix) bumps the MINOR component and appends an entry to `CHANGELOG.md`.
+Internal-only fixes bump the PATCH component.

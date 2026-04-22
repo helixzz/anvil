@@ -110,7 +110,13 @@ export default function App() {
         <div style={{ marginTop: "auto", paddingTop: 16 }} className="col">
           <div className="dim" style={{ fontSize: 12 }}>
             {t("status.version")}:&nbsp;
-            <span className="mono">{statusQuery.data?.version ?? "—"}</span>
+            <span className="mono" title="API version">
+              api&nbsp;{statusQuery.data?.version ?? "—"}
+            </span>
+            &nbsp;·&nbsp;
+            <span className="mono" title="Web UI version">
+              web&nbsp;{__ANVIL_WEB_VERSION__}
+            </span>
           </div>
           <div className="dim" style={{ fontSize: 12 }}>
             {t("status.runner")}:&nbsp;

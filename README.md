@@ -1,5 +1,7 @@
 # Anvil — NVMe Validator & IOps Lab
 
+![version](https://img.shields.io/badge/version-0.2.0-orange)
+
 A web-based disk benchmark platform for lab environments. Built for engineers who
 frequently swap drives through a dedicated test bench and want to capture,
 compare, and track performance in a structured database rather than as one-off
@@ -10,32 +12,44 @@ Anvil combines:
 - **CrystalDiskMark-style preset profiles** for fast sanity checks
 - **SNIA SSS PTS-style rigor** (purge → precondition → steady-state detection)
 - **Full `fio` sweep coverage** (block size × queue depth × thread count)
-- **System-wide environment validation and remediation** (CPU governor, PCIe
-  ASPM, block-layer tuning, thermal state, idle baseline)
+- **System-wide environment validation** (CPU governor, PCIe ASPM,
+  block-layer tuning, thermal state, idle baseline)
 - **Persistent device registry** keyed off stable hardware fingerprints
-- **Cross-device comparison, regression tracking, leaderboards, and workload-fit
-  scoring**
+- **Per-run time-series charts** (IOPS / bandwidth / latency / temperature)
+  with phase-boundary annotations
+- **Auto-derived sweep charts** (block-size sweep, queue-depth sweep)
+- **Device model library** indexed by brand/model, with cross-run
+  comparison and headline metrics per test case
+- **Stability and thermal scoring** (IOPS CV, temperature range) per
+  model, rolled up across all complete runs
 
-The full technical design lives in [`docs/DESIGN.md`](docs/DESIGN.md). This
-README covers how to run the proof of concept.
+The full technical design lives in [`docs/DESIGN.md`](docs/DESIGN.md). The
+changelog lives in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Status
 
-**Proof of concept**. The POC implements the vertical slice described in the
-design doc:
+Version **0.2.0** — beyond the initial POC. Implemented:
 
-- NVMe device discovery with system-disk exclusion
-- A **Quick** benchmark profile (sequential 1 MiB QD8 read + random 4 KiB QD32
-  read)
-- Privileged runner that invokes `fio` and streams progress
-- FastAPI backend with WebSocket live updates
-- React + TypeScript + ECharts UI with English / Chinese i18n
-- PostgreSQL persistence for devices and runs
-- Docker Compose deployment
+- Device discovery with a multi-layer system-disk guard (mounts, swap,
+  DM/LVM/MD holder walk, whole-disk-mount detection).
+- 8 benchmark profiles covering non-destructive read sweeps, an
+  ezFIO-style destructive sweep, SNIA-flavoured stability, and
+  real-world workloads (MySQL OLTP, OLAP scan, VM hosting, video
+  editing, desktop general).
+- FastAPI backend with WebSocket live updates and a full REST API
+  (runs, devices, models, timeseries, phases, compare).
+- Privileged runner that reaches into the host's mount namespace via
+  `nsenter -t 1 -m` so `lsblk`, `findmnt`, and `nvme list` see the real
+  host view.
+- React + TypeScript + ECharts UI with English / Chinese i18n, six
+  time-series / sweep chart types per run, a models library page, and a
+  model detail page with stability and thermal score cards.
+- PostgreSQL persistence, Docker Compose deployment.
 
-Broader profiles (Standard, SNIA PTS, Endurance), environment validation,
-comparison workbench, reports, and vendor-specific SMART plugins are on the
-roadmap — see [`docs/DESIGN.md`](docs/DESIGN.md).
+The roadmap covers true SNIA steady-state convergence, an endurance /
+soak profile with thermal auto-pause, a read-only environment-validator
+page, cross-model comparison workbench, PDF/ODS/HTML report exports, and
+shareable `/r/<slug>` public links — see [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Hardware and OS requirements
 

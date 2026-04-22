@@ -52,6 +52,44 @@ export function TimeseriesChart({
     grouped[key].sort((a, b) => a[0] - b[0]);
   }
 
+  const totalPoints = Object.values(grouped).reduce(
+    (acc, arr) => acc + arr.length,
+    0,
+  );
+
+  if (totalPoints === 0) {
+    return (
+      <div style={{ height }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: "#e2e8f0",
+            marginBottom: 6,
+          }}
+        >
+          {title}
+        </div>
+        <div
+          style={{
+            height: height - 24,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#94a3b8",
+            border: "1px dashed #233256",
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+        >
+          {metrics.length === 0
+            ? "Waiting for samples…"
+            : `Received ${metrics.length} sample(s), none matched series keys`}
+        </div>
+      </div>
+    );
+  }
+
   const markLines = phaseBoundaries(phases).map((b, idx) => ({
     xAxis: b.x,
     label: {
@@ -73,7 +111,7 @@ export function TimeseriesChart({
         textStyle: { fontFamily: "inherit" },
         grid: { top: 44, right: 24, bottom: 40, left: 70 },
         title: {
-          text: title,
+          text: `${title}  ·  ${totalPoints} pts`,
           left: 8,
           top: 4,
           textStyle: { color: "#e2e8f0", fontSize: 13, fontWeight: 500 },
