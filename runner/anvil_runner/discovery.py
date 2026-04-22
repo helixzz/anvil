@@ -210,7 +210,7 @@ async def _lsblk_tree() -> dict[str, Any]:
 
 
 async def _nvme_list() -> dict[str, Any]:
-    rc, out, _ = await _run_cmd("nvme", "list", "-o", "json")
+    rc, out, _ = await _run_host("nvme", "list", "-o", "json")
     if rc != 0:
         return {"Devices": []}
     try:
