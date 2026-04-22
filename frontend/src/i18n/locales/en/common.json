@@ -9,6 +9,7 @@
     "runs": "Runs",
     "newRun": "New run",
     "models": "Models",
+    "compare": "Compare",
     "system": "System"
   },
   "common": {
@@ -193,5 +194,21 @@
     "remediation": "Remediation",
     "onlyIssues": "Show issues only",
     "noneInCategory": "No checks match the current filter."
+  },
+  "compare": {
+    "title": "Cross-model comparison",
+    "subtitle": "Pick two or more device models that share at least one benchmark phase, then overlay their results for a specific metric.",
+    "pickModels": "Pick models",
+    "pickPhase": "Pick benchmark phase",
+    "pickMetric": "Pick metric",
+    "noCommonPhases": "No benchmark phase is common to every selected model.",
+    "noRuns": "This model has no completed runs yet.",
+    "summary": "Per-model summary",
+    "model": "Model",
+    "runs": "Runs",
+    "mean": "Mean",
+    "median": "Median",
+    "best": "Best",
+    "sample": "Individual sample"
   }
 }

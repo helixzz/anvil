@@ -307,3 +307,146 @@ async def compare_phase(
             for phase, run in rows
         ],
     }
+
+
+@router.get("/compare/common-phases")
+async def common_phases_across_models(
+    slugs: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Return phase_names that every selected model has at least one complete run of.
+
+    Used by the Compare workbench so the phase selector only offers phases we
+    can actually render for the full selection.
+    """
+    slug_list = [s for s in slugs.split(",") if s.strip()]
+    if not slug_list:
+        return {"slugs": [], "phase_names": []}
+    all_devices = (await session.execute(select(Device))).scalars().all()
+    model_to_device_ids: dict[str, list[str]] = {}
+    for d in all_devices:
+        key = _model_slug(_brand_for(d), d.model)
+        if key in slug_list:
+            model_to_device_ids.setdefault(key, []).append(d.id)
+
+    if set(model_to_device_ids.keys()) != set(slug_list):
+        missing = sorted(set(slug_list) - set(model_to_device_ids.keys()))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown model slug(s): {missing}",
+        )
+
+    phase_sets: list[set[str]] = []
+    for device_ids in model_to_device_ids.values():
+        stmt = (
+            select(RunPhase.phase_name)
+            .join(Run, Run.id == RunPhase.run_id)
+            .where(Run.device_id.in_(device_ids))
+            .where(Run.status == "complete")
+            .distinct()
+        )
+        names = {row[0] for row in (await session.execute(stmt)).all()}
+        phase_sets.append(names)
+
+    common = sorted(set.intersection(*phase_sets)) if phase_sets else []
+    return {"slugs": slug_list, "phase_names": common}
+
+
+@router.get("/compare")
+async def compare_across_models(
+    slugs: str,
+    phase_name: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Aggregate one phase's samples across multiple models for side-by-side comparison.
+
+    For each selected model we compute mean / median / best read-IOPS,
+    read-BW, mean latency, p99 latency across every complete run that ran
+    the named phase, plus the raw sample list so the UI can show both a
+    roll-up bar chart and a scatter of individual runs.
+    """
+    slug_list = [s for s in slugs.split(",") if s.strip()]
+    if not slug_list:
+        return {"phase_name": phase_name, "models": []}
+
+    all_devices = (await session.execute(select(Device))).scalars().all()
+    slug_to_device_ids: dict[str, list[str]] = {}
+    for d in all_devices:
+        key = _model_slug(_brand_for(d), d.model)
+        if key in slug_list:
+            slug_to_device_ids.setdefault(key, []).append(d.id)
+
+    models_out: list[dict[str, Any]] = []
+    for slug in slug_list:
+        device_ids = slug_to_device_ids.get(slug) or []
+        if not device_ids:
+            models_out.append(
+                {"slug": slug, "brand": None, "model": None, "samples": [], "summary": {}}
+            )
+            continue
+        rep = next((d for d in all_devices if d.id in device_ids), None)
+        stmt = (
+            select(RunPhase, Run)
+            .join(Run, Run.id == RunPhase.run_id)
+            .where(Run.device_id.in_(device_ids))
+            .where(Run.status == "complete")
+            .where(RunPhase.phase_name == phase_name)
+            .order_by(Run.finished_at.asc())
+        )
+        rows = (await session.execute(stmt)).all()
+        samples: list[dict[str, Any]] = []
+        for phase, run in rows:
+            samples.append(
+                {
+                    "run_id": run.id,
+                    "device_id": run.device_id,
+                    "finished_at": run.finished_at,
+                    "read_iops": phase.read_iops,
+                    "read_bw_bytes": phase.read_bw_bytes,
+                    "read_clat_mean_ns": phase.read_clat_mean_ns,
+                    "read_clat_p99_ns": phase.read_clat_p99_ns,
+                    "write_iops": phase.write_iops,
+                    "write_bw_bytes": phase.write_bw_bytes,
+                    "write_clat_mean_ns": phase.write_clat_mean_ns,
+                    "write_clat_p99_ns": phase.write_clat_p99_ns,
+                }
+            )
+        summary = _summarise_samples(samples)
+        models_out.append(
+            {
+                "slug": slug,
+                "brand": _brand_for(rep) if rep else None,
+                "model": rep.model if rep else None,
+                "device_count": len(device_ids),
+                "samples": samples,
+                "summary": summary,
+            }
+        )
+
+    return {"phase_name": phase_name, "models": models_out}
+
+
+def _summarise_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    from statistics import mean, median
+
+    def collect(key: str) -> list[float]:
+        return [float(s[key]) for s in samples if s.get(key) not in (None, 0)]
+
+    out: dict[str, Any] = {"sample_count": len(samples)}
+    for key in (
+        "read_iops", "read_bw_bytes",
+        "write_iops", "write_bw_bytes",
+        "read_clat_mean_ns", "read_clat_p99_ns",
+        "write_clat_mean_ns", "write_clat_p99_ns",
+    ):
+        vals = collect(key)
+        if not vals:
+            out[key] = None
+            continue
+        out[key] = {
+            "mean": mean(vals),
+            "median": median(vals),
+            "best": max(vals) if "iops" in key or "bw" in key else min(vals),
+            "count": len(vals),
+        }
+    return out

@@ -9,6 +9,7 @@
     "runs": "运行记录",
     "newRun": "新建运行",
     "models": "设备型号库",
+    "compare": "跨型号对比",
     "system": "系统环境"
   },
   "common": {
@@ -193,5 +194,21 @@
     "remediation": "修复建议",
     "onlyIssues": "只显示问题项",
     "noneInCategory": "当前筛选条件下无检查项。"
+  },
+  "compare": {
+    "title": "跨型号对比",
+    "subtitle": "选择两个及以上至少共享过一个基准测试阶段的型号，针对指定指标叠加对比。",
+    "pickModels": "选择型号",
+    "pickPhase": "选择测试阶段",
+    "pickMetric": "选择指标",
+    "noCommonPhases": "所选型号没有共同运行过的测试阶段。",
+    "noRuns": "该型号尚无完成的测试。",
+    "summary": "每型号汇总",
+    "model": "型号",
+    "runs": "运行数",
+    "mean": "平均",
+    "median": "中位",
+    "best": "最好",
+    "sample": "单次样本"
   }
 }

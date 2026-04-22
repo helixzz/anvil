@@ -8,6 +8,24 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.4.0 — 2026-04-22
+
+### Added
+- **Cross-model comparison workbench** at `/compare`. Multi-select any
+  tested device models, pick a benchmark phase they all share (the
+  selector is populated via the new
+  `GET /api/models/compare/common-phases?slugs=...` endpoint so phases
+  that aren't common to all selections never appear), pick a metric
+  (read/write IOPS / BW / mean / p99 latency), and see:
+  - A combined bar + scatter chart: two bar series per model (mean and
+    best) plus individual-sample scatter points in per-model colour so
+    outliers stand out.
+  - A per-model summary table with sample count, mean, median, and best.
+  Selection is reflected in the URL query string (`?models=...&phase=
+  ...&metric=...`) so a comparison view is shareable/bookmarkable.
+- `GET /api/models/compare?slugs=...&phase_name=...` returns full samples
+  plus a per-model summary (mean/median/best) for each numeric metric.
+
 ## 0.3.1 — 2026-04-22
 
 ### Changed

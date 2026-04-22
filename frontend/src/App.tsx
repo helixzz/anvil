@@ -12,6 +12,7 @@ import NewRun from "@/pages/NewRun";
 import RunDetail from "@/pages/RunDetail";
 import Models from "@/pages/Models";
 import ModelDetail from "@/pages/ModelDetail";
+import Compare from "@/pages/Compare";
 import System from "@/pages/System";
 
 function LanguageSwitcher() {
@@ -108,6 +109,7 @@ export default function App() {
         <NavLink to="/devices">{t("nav.devices")}</NavLink>
         <NavLink to="/runs">{t("nav.runs")}</NavLink>
         <NavLink to="/models">{t("nav.models")}</NavLink>
+        <NavLink to="/compare">{t("nav.compare")}</NavLink>
         <NavLink to="/system">{t("nav.system")}</NavLink>
         <NavLink to="/runs/new">{t("nav.newRun")}</NavLink>
         <div style={{ marginTop: "auto", paddingTop: 16 }} className="col">
@@ -150,6 +152,7 @@ export default function App() {
           <Route path="/runs/:id" element={<RunDetail />} />
           <Route path="/models" element={<Models />} />
           <Route path="/models/:slug" element={<ModelDetail />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/system" element={<System />} />
           <Route
             path="*"

@@ -255,6 +255,37 @@ export interface PhaseCompareSample {
   write_clat_p99_ns: number | null;
 }
 
+export interface MetricSummary {
+  mean: number;
+  median: number;
+  best: number;
+  count: number;
+}
+
+export interface CrossModelCompareEntry {
+  slug: string;
+  brand: string | null;
+  model: string | null;
+  device_count?: number;
+  samples: PhaseCompareSample[];
+  summary: Partial<Record<
+    | "read_iops"
+    | "read_bw_bytes"
+    | "write_iops"
+    | "write_bw_bytes"
+    | "read_clat_mean_ns"
+    | "read_clat_p99_ns"
+    | "write_clat_mean_ns"
+    | "write_clat_p99_ns",
+    MetricSummary | null
+  >> & { sample_count: number };
+}
+
+export interface CrossModelCompareResult {
+  phase_name: string;
+  models: CrossModelCompareEntry[];
+}
+
 export interface PhaseHistogramDirection {
   total_ios: number;
   histogram: { bin_ns: number; count: number }[];
@@ -340,6 +371,14 @@ export const api = {
   compareModelPhase: (slug: string, phase_name: string) =>
     jsonFetch<{ phase_name: string; samples: PhaseCompareSample[] }>(
       `/api/models/${encodeURIComponent(slug)}/compare?phase_name=${encodeURIComponent(phase_name)}`,
+    ),
+  commonPhasesAcrossModels: (slugs: string[]) =>
+    jsonFetch<{ slugs: string[]; phase_names: string[] }>(
+      `/api/models/compare/common-phases?slugs=${encodeURIComponent(slugs.join(","))}`,
+    ),
+  compareAcrossModels: (slugs: string[], phase_name: string) =>
+    jsonFetch<CrossModelCompareResult>(
+      `/api/models/compare?slugs=${encodeURIComponent(slugs.join(","))}&phase_name=${encodeURIComponent(phase_name)}`,
     ),
   getEnvironment: () => jsonFetch<EnvironmentReport>("/api/environment"),
 };
