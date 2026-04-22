@@ -8,6 +8,44 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.3.1 — 2026-04-22
+
+### Changed
+- **GitHub Actions CI overhauled**. The workflow now fails loudly on any
+  ruff / pytest / typecheck regression (previously pytest was marked
+  `continue-on-error` and silently hid failures). New jobs and tightenings:
+  - `backend` runs under a Python matrix of 3.11 + 3.12, produces a
+    coverage report via `pytest-cov`, and uploads `coverage.xml` as a
+    14-day artifact.
+  - `runner` runs the same Python matrix and now does an import-smoke that
+    imports `server`, `fio`, `discovery`, and the new `env` modules to
+    catch NameError / ImportError regressions the ruff pass misses.
+  - `frontend` now uploads the Vite `dist/` build as a 14-day artifact.
+  - New `version-sync` job asserts that every version string
+    (`backend/pyproject.toml`, `runner/pyproject.toml`,
+    `frontend/package.json`, plus the two `__version__` dunders) agrees,
+    so tag-triggered releases can't ship a mismatched set.
+  - New `integration` job stands up the full Docker Compose stack with
+    `ANVIL_SIMULATION_MODE=true` (fio `null` ioengine, so the job is
+    hermetic and needs no real block devices), waits for the API health
+    endpoint, and curls `/api/status`, `/api/runs/profiles`,
+    `/api/devices`, `/api/models`, `/api/environment`, and the nginx
+    SPA route. This catches Compose/env wiring regressions that unit
+    tests can't.
+  - Docker builds now use `type=gha` caching for massive cache-hit speedups
+    on repeat runs.
+- **New `Release` workflow triggers on `v*` tag push**. It first
+  re-verifies that the tag's version matches every component (fails the
+  release early if versions drift), then extracts the CHANGELOG section
+  for the tag, and publishes a proper GitHub Release with the changelog
+  as the release body. Pre-release tags (`v1.2.3-rc1`) are marked as
+  pre-releases automatically.
+- README now carries CI + Release status badges.
+
+### Ops
+- This is the first tagged release. Every subsequent milestone will be
+  cut as `vX.Y.Z` and tracked in the Releases tab.
+
 ## 0.3.0 — 2026-04-22
 
 ### Added

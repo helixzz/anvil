@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Draft GitHub Release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches every version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "tag version: $TAG"
+          python3 - <<PY
+          import json, tomllib, pathlib, sys, os
+          tag = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          be = tomllib.loads(pathlib.Path("backend/pyproject.toml").read_text())["project"]["version"]
+          rn = tomllib.loads(pathlib.Path("runner/pyproject.toml").read_text())["project"]["version"]
+          fe = json.loads(pathlib.Path("frontend/package.json").read_text())["version"]
+          mismatches = [(k, v) for k, v in {"backend": be, "runner": rn, "frontend": fe}.items() if v != tag]
+          if mismatches:
+              print(f"Tag {tag} does not match: {mismatches}", file=sys.stderr)
+              sys.exit(1)
+          print(f"Tag {tag} matches all three components")
+          PY
+
+      - name: Extract CHANGELOG section for this version
+        id: changelog
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          python3 - <<PY
+          import pathlib, re, os
+          tag = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          text = pathlib.Path("CHANGELOG.md").read_text()
+          heads = list(re.finditer(r'^## (\d+\.\d+\.\d+)\b.*$', text, flags=re.M))
+          body = f"See CHANGELOG.md for {tag}."
+          for i, m in enumerate(heads):
+              if m.group(1) == tag:
+                  start = m.end()
+                  end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+                  body = text[start:end].strip()
+                  break
+          out_path = os.environ["GITHUB_OUTPUT"]
+          with open(out_path, "a") as f:
+              f.write("body<<ANVILEOF\n")
+              f.write(body)
+              f.write("\nANVILEOF\n")
+          print(f"Extracted {len(body)} chars for {tag}")
+          PY
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Anvil ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: false
+          make_latest: true
