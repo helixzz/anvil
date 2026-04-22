@@ -34,6 +34,7 @@ class DiscoveredDevice:
     partitions: list[str] = field(default_factory=list)
     mount_points: list[str] = field(default_factory=list)
     product_name: str = ""
+    pcie: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -55,6 +56,7 @@ class DiscoveredDevice:
             "partitions": self.partitions,
             "mount_points": self.mount_points,
             "product_name": self.product_name,
+            "pcie": self.pcie,
         }
 
 
@@ -387,6 +389,16 @@ async def discover() -> list[DiscoveredDevice]:
         if nvme_entry:
             product_name = (nvme_entry.get("ProductName") or "").strip()
 
+        pcie_info: dict[str, Any] | None = None
+        if kname.startswith("nvme"):
+            # nvme0n1 → nvme0; nvme0c0n1 → nvme0
+            controller = kname.split("n", 1)[0]
+            from anvil_runner.pcie import probe_nvme_pcie
+            try:
+                pcie_info = await probe_nvme_pcie(controller)
+            except Exception as exc:
+                log.warning("pcie_probe_failed", kname=kname, error=str(exc))
+
         size_bytes = int(entry.get("size") or 0)
         rota = bool(entry.get("rota"))
         log_sec = entry.get("log-sec")
@@ -412,6 +424,7 @@ async def discover() -> list[DiscoveredDevice]:
                 partitions=partition_paths,
                 mount_points=all_mountpoints,
                 product_name=product_name,
+                pcie=pcie_info,
             )
         )
 

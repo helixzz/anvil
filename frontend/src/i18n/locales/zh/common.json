@@ -219,5 +219,19 @@
     "median": "中位",
     "best": "最好",
     "sample": "单次样本"
+  },
+  "pcie": {
+    "title": "PCIe 链路",
+    "help": "对比设备能力（LnkCap）与当前运行状态（LnkSta）。若显示 degraded，则本次测试并未充分利用该设备的 PCIe 带宽 —— 例如 Gen5 x4 设备插在 Gen4 插槽上会显示 degraded，当前状态为 Gen4 x4。",
+    "capability": "能力",
+    "status": "当前",
+    "link": "链路",
+    "raw": "lspci 原文",
+    "column": "",
+    "optimal": "最佳",
+    "degraded": "降速",
+    "speedDowngraded": "速率降级",
+    "widthDowngraded": "位宽降级",
+    "address": "PCIe 地址"
   }
 }

@@ -132,7 +132,11 @@ async def _execute_run(run_id: str) -> None:
 
         run.status = RunStatus.PREFLIGHT.value
         run.started_at = datetime.now(UTC)
-        run.host_system = _capture_host_system()
+        host_sys = _capture_host_system()
+        device_meta = device.metadata_json or {}
+        if device_meta.get("pcie"):
+            host_sys["pcie_at_run"] = device_meta["pcie"]
+        run.host_system = host_sys
         device_path = device.current_device_path or run.device_path_at_run
         await session.flush()
 

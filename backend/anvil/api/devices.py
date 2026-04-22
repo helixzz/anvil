@@ -95,6 +95,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
                     "partitions": d.partitions,
                     "mount_points": d.mount_points,
                     "product_name": d.product_name,
+                    "pcie": d.pcie,
                 },
             )
             session.add(device)
@@ -117,6 +118,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
                 "partitions": d.partitions,
                 "mount_points": d.mount_points,
                 "product_name": d.product_name,
+                "pcie": d.pcie,
             }
 
         snapshot = DeviceSnapshot(
@@ -125,6 +127,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
             captured_at=now,
             raw_lsblk=d.raw_lsblk,
             raw_nvme_list=d.raw_nvme,
+            pcie=d.pcie,
             parsed={
                 "path": d.path,
                 "is_testable": d.is_testable,
@@ -213,6 +216,7 @@ async def get_device_history(
         "model": device.model,
         "serial": device.serial,
         "firmware": device.firmware,
+        "pcie": (device.metadata_json or {}).get("pcie"),
         "runs": entries,
         "firmware_changes": firmware_changes,
     }

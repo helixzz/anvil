@@ -219,5 +219,19 @@
     "median": "Median",
     "best": "Best",
     "sample": "Individual sample"
+  },
+  "pcie": {
+    "title": "PCIe link",
+    "help": "Compares what the device is capable of (LnkCap) against what the link is actually running at (LnkSta). A degraded flag means the test is NOT using the device's full PCIe bandwidth — e.g. a Gen5 x4 drive plugged into a Gen4 slot will show degraded with status=Gen4 x4.",
+    "capability": "Capability",
+    "status": "Current",
+    "link": "Link",
+    "raw": "lspci",
+    "column": "",
+    "optimal": "optimal",
+    "degraded": "degraded",
+    "speedDowngraded": "speed downgraded",
+    "widthDowngraded": "width downgraded",
+    "address": "PCIe address"
   }
 }

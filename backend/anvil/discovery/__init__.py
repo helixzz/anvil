@@ -31,6 +31,7 @@ class DiscoveredDevice:
     partitions: list[str] = field(default_factory=list)
     mount_points: list[str] = field(default_factory=list)
     product_name: str = ""
+    pcie: dict[str, Any] | None = None
 
     @property
     def fingerprint(self) -> str:
@@ -65,6 +66,7 @@ class DiscoveredDevice:
             partitions=list(data.get("partitions") or []),
             mount_points=list(data.get("mount_points") or []),
             product_name=str(data.get("product_name") or ""),
+            pcie=data.get("pcie"),
         )
 
 

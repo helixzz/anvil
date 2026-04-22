@@ -17,6 +17,7 @@ import {
 import { SweepChart } from "@/components/SweepChart";
 import { LatencyHistogramChart } from "@/components/LatencyHistogramChart";
 import { SniaAnalysisCard } from "@/components/SniaAnalysisCard";
+import { PcieLinkCard, type PcieLinkData } from "@/components/PcieLinkCard";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -427,6 +428,12 @@ export default function RunDetail() {
 
       {(run.smart_before || run.smart_after) && (
         <SmartDiffCard smartBefore={run.smart_before} smartAfter={run.smart_after} />
+      )}
+
+      {(run.host_system as { pcie_at_run?: PcieLinkData } | undefined)?.pcie_at_run && (
+        <PcieLinkCard
+          pcie={(run.host_system as { pcie_at_run: PcieLinkData }).pcie_at_run}
+        />
       )}
 
       {run.profile_name.startsWith("snia_") && <SniaAnalysisCard runId={run.id} />}

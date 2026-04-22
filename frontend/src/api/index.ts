@@ -316,6 +316,7 @@ export interface DeviceHistory {
   model: string;
   serial: string;
   firmware: string | null;
+  pcie?: Record<string, unknown> | null;
   runs: DeviceHistoryEntry[];
   firmware_changes: { captured_at: string; firmware: string }[];
 }

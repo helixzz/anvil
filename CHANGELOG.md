@@ -8,6 +8,39 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.7.0 — 2026-04-22
+
+### Added
+- **PCIe link capability + current state recorded for every NVMe
+  device**, fulfilling the "device supports PCIe 5.0 x4 but this test
+  ran at PCIe 4.0 x4" requirement. New `anvil_runner/pcie.py` module
+  reads `/sys/class/nvme/<n>/address` for each NVMe controller, runs
+  `lspci -vvv -s <bdf>` in the host namespace, and parses the `LnkCap`
+  and `LnkSta` lines into a structured
+  `{capability, status, degraded, speed_degraded, width_degraded}`
+  object.
+- PCIe probe output is persisted in three places:
+  - `Device.metadata_json.pcie` — always reflects the latest rescan
+  - `DeviceSnapshot.pcie` — historical record per rescan
+  - `Run.host_system.pcie_at_run` — snapshot taken at the moment the
+    run started, so the report shows the exact link state that was in
+    effect when the benchmark collected its numbers (immune to later
+    hot-swaps / re-insertions)
+- New `PcieLinkCard` component auto-renders on:
+  - Run detail page, underneath the SMART diff, so every report shows
+    the link state that was actually active while fio was running
+  - Device detail page, so even before a run the user can see how the
+    drive is currently connected
+  The card shows a green "optimal" badge when `LnkSta == LnkCap` and a
+  yellow "degraded" badge otherwise, with sub-badges for
+  speed-downgraded and width-downgraded so the reader can tell
+  immediately which dimension is mis-matched. The raw `lspci` lines
+  are shown in a dim monospace column for operator forensics.
+
+### Changed
+- `GET /api/devices/{id}/history` now also returns `pcie` so the
+  device detail page renders the card with one fetch.
+
 ## 0.6.0 — 2026-04-22
 
 ### Added
