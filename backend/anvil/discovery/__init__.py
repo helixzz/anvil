@@ -33,8 +33,15 @@ class DiscoveredDevice:
 
     @property
     def fingerprint(self) -> str:
-        material = self.wwid or f"{self.model}|{self.serial}"
-        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+        """Stable identity across lsblk visibility changes.
+
+        We hash model|serial rather than preferring WWID because WWID may be
+        absent on SATA, USB, or virtual devices, and it can also appear or
+        disappear when lsblk is re-run in a different mount namespace (e.g.
+        container vs host). model and serial are always reported by nvme-cli
+        or lsblk -o MODEL,SERIAL and are effectively unique.
+        """
+        return hashlib.sha256(f"{self.model}|{self.serial}".encode()).hexdigest()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DiscoveredDevice:

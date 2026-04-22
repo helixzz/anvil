@@ -25,18 +25,18 @@ def _make(model: str = "ACME SSD", serial: str = "SN-1234", wwid: str | None = N
     )
 
 
-def test_fingerprint_prefers_wwid() -> None:
-    wwid = "nvme.1234-abc"
-    d = _make(wwid=wwid)
-    assert d.fingerprint == hashlib.sha256(wwid.encode()).hexdigest()
-
-
-def test_fingerprint_falls_back_to_model_serial() -> None:
+def test_fingerprint_uses_model_and_serial() -> None:
     d = _make(model="MODEL", serial="SN")
     assert d.fingerprint == hashlib.sha256(b"MODEL|SN").hexdigest()
 
 
+def test_fingerprint_ignores_wwid() -> None:
+    with_wwid = _make(model="MODEL", serial="SN", wwid="nvme.abc")
+    without_wwid = _make(model="MODEL", serial="SN", wwid=None)
+    assert with_wwid.fingerprint == without_wwid.fingerprint
+
+
 def test_fingerprint_is_stable_across_instances() -> None:
-    a = _make(wwid="x")
-    b = _make(wwid="x")
+    a = _make()
+    b = _make()
     assert a.fingerprint == b.fingerprint
