@@ -179,3 +179,85 @@ async def get_run_phases(
             }
         )
     return out
+
+
+def _extract_clat_bins(fio_result: dict | None) -> dict[str, list[tuple[int, int]]]:
+    """Return {"read": [(bin_ns, count), ...], "write": [...]} from a fio json+ result.
+
+    fio's json+ output nests latency bins at jobs[].read.clat_ns.bins as a
+    {bin_ns_str: count} dict. We aggregate across every job in the result to
+    handle numjobs > 1 runs where each job reports its own histogram.
+    """
+    out: dict[str, list[tuple[int, int]]] = {"read": [], "write": []}
+    if not fio_result:
+        return out
+    jobs = fio_result.get("jobs") or []
+    agg: dict[str, dict[int, int]] = {"read": {}, "write": {}}
+    for job in jobs:
+        for direction in ("read", "write"):
+            section = job.get(direction)
+            if not isinstance(section, dict):
+                continue
+            clat = section.get("clat_ns")
+            if not isinstance(clat, dict):
+                continue
+            bins = clat.get("bins")
+            if not isinstance(bins, dict):
+                continue
+            for k, v in bins.items():
+                try:
+                    bin_ns = int(k)
+                    count = int(v)
+                except (TypeError, ValueError):
+                    continue
+                if count <= 0:
+                    continue
+                agg[direction][bin_ns] = agg[direction].get(bin_ns, 0) + count
+    for d in ("read", "write"):
+        out[d] = sorted(agg[d].items(), key=lambda kv: kv[0])
+    return out
+
+
+@router.get("/{run_id}/phases/{phase_id}/histogram")
+async def get_phase_histogram(
+    run_id: str,
+    phase_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Latency histogram + exceedance CDF for one phase, derived from fio json+ bins."""
+    phase = await session.get(RunPhase, phase_id)
+    if phase is None or phase.run_id != run_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phase not found")
+    bins = _extract_clat_bins(phase.fio_result)
+
+    directions: dict[str, dict] = {}
+    for direction, arr in bins.items():
+        if not arr:
+            continue
+        total = sum(c for _, c in arr)
+        if total <= 0:
+            continue
+        histogram = [{"bin_ns": b, "count": c} for b, c in arr]
+        running = 0
+        cdf: list[dict] = []
+        for b, c in arr:
+            running += c
+            cdf.append(
+                {
+                    "bin_ns": b,
+                    "cdf": running / total,
+                    "exceedance": max(0.0, 1.0 - running / total),
+                }
+            )
+        directions[direction] = {
+            "total_ios": total,
+            "histogram": histogram,
+            "cdf": cdf,
+        }
+
+    return {
+        "run_id": run_id,
+        "phase_id": phase_id,
+        "phase_name": phase.phase_name,
+        "directions": directions,
+    }

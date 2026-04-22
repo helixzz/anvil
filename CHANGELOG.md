@@ -8,6 +8,32 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.2.2 — 2026-04-22
+
+### Fixed
+- **Run detail live-update loop that triggered `ERR_INSUFFICIENT_RESOURCES`
+  and froze the browser tab.** On a page with an active run, every incoming
+  WebSocket frame (a new `phase_sample` every second, a `smart_sample` every
+  5 s) fired a React effect whose dependency array included the
+  TanStack Query result objects (`runQ`, `phasesQ`, `timeseriesQ`). Those
+  objects get a new identity on every render, so calling `.refetch()` inside
+  the effect produced a new render, which produced a new dep array, which
+  re-ran the effect… 27,254 `/api/runs/{id}/timeseries` requests were fired
+  in the first 15 seconds, exhausting the browser's socket pool and
+  preventing any follow-up network I/O (including the 2-second polling
+  that would otherwise have updated the charts). The user saw stale charts
+  that only moved after a manual browser reload.
+
+  The effect now depends only on `events.length` (a primitive), tracks the
+  last-processed index in a `useRef`, and uses `queryClient.invalidateQueries()`
+  to request a single refetch per `phase_complete` / `run_complete` event
+  instead of calling `.refetch()` on captured query objects. Per-second
+  chart updates flow through TanStack Query's regular `refetchInterval`
+  polling (2 s), plus the WebSocket fast-path nudge for terminal events.
+  A long comment in `RunDetail.tsx` documents the exact infinite-loop trap
+  so a future maintainer can't accidentally reintroduce it by adding query
+  objects back to the dep array.
+
 ## 0.2.1 — 2026-04-22
 
 ### Added

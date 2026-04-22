@@ -7,11 +7,12 @@ import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from anvil.api import require_bearer
 from anvil.db import get_session
 from anvil.discovery import discover
-from anvil.models import Device, DeviceSnapshot
+from anvil.models import Device, DeviceSnapshot, Run
 from anvil.schemas import DeviceOut
 
 router = APIRouter(prefix="/devices", tags=["devices"], dependencies=[Depends(require_bearer)])
@@ -138,6 +139,83 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
     await session.commit()
     refreshed = await session.execute(select(Device).order_by(Device.last_seen.desc()))
     return list(refreshed.scalars())
+
+
+@router.get("/{device_id}/history")
+async def get_device_history(
+    device_id: str, session: AsyncSession = Depends(get_session)
+) -> dict[str, Any]:
+    """Return all complete runs for this device with headline metrics, in time order.
+
+    Powers the device detail page's regression timeline: the UI renders a small
+    line chart per metric so you can spot a drive degrading run-over-run or
+    correlate a firmware change with a performance shift.
+    """
+    device = await session.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    runs_result = await session.execute(
+        select(Run)
+        .where(Run.device_id == device_id)
+        .options(selectinload(Run.phases))
+        .order_by(Run.finished_at.asc().nullslast(), Run.queued_at.asc())
+    )
+    entries: list[dict[str, Any]] = []
+    for r in runs_result.scalars():
+        best_read_iops = max(
+            (p.read_iops for p in r.phases if p.read_iops is not None),
+            default=None,
+        )
+        best_write_iops = max(
+            (p.write_iops for p in r.phases if p.write_iops is not None),
+            default=None,
+        )
+        best_read_bw = max(
+            (p.read_bw_bytes for p in r.phases if p.read_bw_bytes is not None),
+            default=None,
+        )
+        best_write_bw = max(
+            (p.write_bw_bytes for p in r.phases if p.write_bw_bytes is not None),
+            default=None,
+        )
+        entries.append(
+            {
+                "id": r.id,
+                "profile_name": r.profile_name,
+                "status": r.status,
+                "queued_at": r.queued_at,
+                "started_at": r.started_at,
+                "finished_at": r.finished_at,
+                "best_read_iops": best_read_iops,
+                "best_write_iops": best_write_iops,
+                "best_read_bw_bytes": best_read_bw,
+                "best_write_bw_bytes": best_write_bw,
+                "phase_count": len(r.phases),
+            }
+        )
+
+    firmware_changes: list[dict[str, Any]] = []
+    last_firmware: str | None = None
+    snap_result = await session.execute(
+        select(DeviceSnapshot)
+        .where(DeviceSnapshot.device_id == device_id)
+        .order_by(DeviceSnapshot.captured_at.asc())
+    )
+    for snap in snap_result.scalars():
+        parsed = snap.parsed or {}
+        fw = parsed.get("firmware")
+        if fw and fw != last_firmware:
+            firmware_changes.append({"captured_at": snap.captured_at, "firmware": fw})
+            last_firmware = fw
+
+    return {
+        "device_id": device_id,
+        "model": device.model,
+        "serial": device.serial,
+        "firmware": device.firmware,
+        "runs": entries,
+        "firmware_changes": firmware_changes,
+    }
 
 
 @router.get("/{device_id}", response_model=DeviceOut)

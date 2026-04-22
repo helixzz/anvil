@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import dayjs from "dayjs";
 
@@ -25,6 +25,7 @@ function isTerminalStatus(status: string | undefined): boolean {
 export default function RunDetail() {
   const { t } = useTranslation();
   const { id = "" } = useParams();
+  const queryClient = useQueryClient();
 
   const runQ = useQuery({
     queryKey: ["run", id],
@@ -34,46 +35,40 @@ export default function RunDetail() {
     enabled: !!id,
   });
 
+  const terminal = isTerminalStatus(runQ.data?.status);
+
   const phasesQ = useQuery({
     queryKey: ["run-phases", id],
     queryFn: () => api.getRunPhases(id),
-    refetchInterval: (q) =>
-      isTerminalStatus(runQ.data?.status)
-        ? false
-        : q.state.data && q.state.data.length > 0
-          ? POLL_INTERVAL_MS * 2
-          : POLL_INTERVAL_MS,
+    refetchInterval: terminal ? false : POLL_INTERVAL_MS,
     enabled: !!id,
   });
 
   const timeseriesQ = useQuery({
     queryKey: ["run-timeseries", id],
     queryFn: () => api.getRunTimeseries(id),
-    refetchInterval: (_q) =>
-      isTerminalStatus(runQ.data?.status) ? false : POLL_INTERVAL_MS,
+    refetchInterval: terminal ? false : POLL_INTERVAL_MS,
     enabled: !!id,
   });
 
   const { events, connected } = useRunStream(id || null);
-  const [, setNudge] = useState(0);
 
+  // Fast-path nudge: when WS delivers a phase_complete / run_complete event,
+  // invalidate the polling queries immediately so the next poll happens now
+  // rather than waiting the full POLL_INTERVAL_MS. Depend only on the events
+  // array length; do NOT depend on query objects (their identity changes on
+  // every render and would trigger an infinite refetch loop).
+  const lastProcessedIdx = useRef(0);
   useEffect(() => {
-    if (events.length === 0) return;
-    const last = events[events.length - 1];
-    if (
-      last.event === "phase_sample" ||
-      last.event === "smart_sample" ||
-      last.event === "phase_complete" ||
-      last.event === "run_complete"
-    ) {
-      setNudge((n) => n + 1);
-      void timeseriesQ.refetch();
-      if (last.event === "phase_complete" || last.event === "run_complete") {
-        void runQ.refetch();
-        void phasesQ.refetch();
+    for (let i = lastProcessedIdx.current; i < events.length; i++) {
+      const ev = events[i];
+      if (ev.event === "phase_complete" || ev.event === "run_complete") {
+        void queryClient.invalidateQueries({ queryKey: ["run", id] });
+        void queryClient.invalidateQueries({ queryKey: ["run-phases", id] });
       }
     }
-  }, [events, runQ, phasesQ, timeseriesQ]);
+    lastProcessedIdx.current = events.length;
+  }, [events.length, id, queryClient]);
 
   const run = runQ.data;
   const phases = phasesQ.data ?? [];
