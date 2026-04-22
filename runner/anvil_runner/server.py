@@ -8,6 +8,7 @@ from typing import Any
 import structlog
 
 from anvil_runner.devices import lsblk_json, nvme_list, read_smart
+from anvil_runner.discovery import discover as discover_devices
 from anvil_runner.fio import FioRunner, PhaseRequest
 
 
@@ -43,7 +44,9 @@ async def run_server(socket_path: Path, simulation: bool = False) -> asyncio.Abs
                 return
 
             if method == "discover":
+                devices = await discover_devices()
                 result = {
+                    "devices": [d.as_dict() for d in devices],
                     "nvme_list": await nvme_list(),
                     "lsblk": await lsblk_json(),
                 }

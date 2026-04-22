@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import BigInteger, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,6 +13,9 @@ from anvil.db import Base
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+_tz_datetime = DateTime(timezone=True)
 
 
 class RunStatus(StrEnum):
@@ -51,8 +54,8 @@ class Device(Base):
     exclusion_reason: Mapped[str | None] = mapped_column(String(256))
     current_device_path: Mapped[str | None] = mapped_column(String(256))
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
-    first_seen: Mapped[datetime] = mapped_column(default=utcnow, nullable=False)
-    last_seen: Mapped[datetime] = mapped_column(default=utcnow, nullable=False)
+    first_seen: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
 
     snapshots: Mapped[list[DeviceSnapshot]] = relationship(
         back_populates="device", cascade="all, delete-orphan"
@@ -67,7 +70,7 @@ class DeviceSnapshot(Base):
     device_id: Mapped[str] = mapped_column(
         ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    captured_at: Mapped[datetime] = mapped_column(default=utcnow, nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
     raw_nvme_list: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     raw_smart: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     raw_lsblk: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -88,9 +91,9 @@ class Run(Base):
     profile_name: Mapped[str] = mapped_column(String(128), nullable=False)
     profile_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=RunStatus.QUEUED.value)
-    queued_at: Mapped[datetime] = mapped_column(default=utcnow, nullable=False)
-    started_at: Mapped[datetime | None] = mapped_column()
-    finished_at: Mapped[datetime | None] = mapped_column()
+    queued_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(_tz_datetime)
+    finished_at: Mapped[datetime | None] = mapped_column(_tz_datetime)
     error_message: Mapped[str | None] = mapped_column(Text)
     host_system: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     smart_before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -123,8 +126,8 @@ class RunPhase(Base):
     numjobs: Mapped[int] = mapped_column(Integer, nullable=False)
     rwmix_write_pct: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     runtime_s: Mapped[int] = mapped_column(Integer, nullable=False)
-    started_at: Mapped[datetime | None] = mapped_column()
-    finished_at: Mapped[datetime | None] = mapped_column()
+    started_at: Mapped[datetime | None] = mapped_column(_tz_datetime)
+    finished_at: Mapped[datetime | None] = mapped_column(_tz_datetime)
 
     fio_jobfile: Mapped[str | None] = mapped_column(Text)
     fio_result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -158,7 +161,7 @@ class RunMetric(Base):
     phase_id: Mapped[str | None] = mapped_column(
         ForeignKey("run_phases.id", ondelete="SET NULL")
     )
-    ts: Mapped[datetime] = mapped_column(default=utcnow, nullable=False)
+    ts: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
     metric_name: Mapped[str] = mapped_column(String(64), nullable=False)
     value: Mapped[float] = mapped_column(Float, nullable=False)
 
@@ -174,7 +177,7 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    ts: Mapped[datetime] = mapped_column(default=utcnow, nullable=False, index=True)
+    ts: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False, index=True)
     actor: Mapped[str | None] = mapped_column(String(128))
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     target: Mapped[str | None] = mapped_column(String(256))
