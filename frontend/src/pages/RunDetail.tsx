@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import dayjs from "dayjs";
 
-import { api } from "@/api";
+import { api, getToken } from "@/api";
 import { humanBps, humanIops, humanNs } from "@/lib/format";
 import { useRunStream } from "@/hooks/useRunStream";
 import {
@@ -262,6 +262,22 @@ export default function RunDetail() {
               </button>
             </div>
           )}
+          <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <a
+              href={`/api/runs/${encodeURIComponent(run.id)}/export.html?token=${encodeURIComponent(getToken() ?? "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <button>{t("runs.exportHtml")}</button>
+            </a>
+            <a
+              href={`/api/runs/${encodeURIComponent(run.id)}/export.json?token=${encodeURIComponent(getToken() ?? "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <button>{t("runs.exportJson")}</button>
+            </a>
+          </div>
         </div>
       </div>
 

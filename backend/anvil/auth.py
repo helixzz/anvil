@@ -129,19 +129,27 @@ def decode_jwt(token: str, *, secret: str) -> dict[str, Any] | None:
 
 async def resolve_principal(
     authorization: str | None = Header(default=None),
+    token: str | None = None,  # accepted as ?token=... for embed links and WS
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(get_session),
 ) -> Principal:
-    """Parse Authorization: Bearer <token>. Accepts either the static bearer
-    token (full admin, synthetic Principal) or a JWT minted by /auth/login.
+    """Parse Authorization: Bearer <token> OR ?token=... query parameter.
+
+    The query-parameter form is for browser-initiated GETs (export.html,
+    export.json, WebSocket upgrade) where the Authorization header can't
+    be attached. For state-changing requests prefer the header.
     """
-    if not authorization or not authorization.lower().startswith("bearer "):
+    raw: str | None = None
+    if authorization and authorization.lower().startswith("bearer "):
+        raw = authorization.split(" ", 1)[1].strip()
+    elif token:
+        raw = token.strip()
+    if not raw:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing bearer token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    raw = authorization.split(" ", 1)[1].strip()
     if raw == settings.bearer_token:
         return Principal.from_token()
 

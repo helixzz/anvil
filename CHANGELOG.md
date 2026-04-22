@@ -8,6 +8,47 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.12.0 — 2026-04-23
+
+### Added
+- **Run report exports**. Every completed run can now be exported as a
+  self-contained, zero-JavaScript HTML document or a lossless JSON
+  bundle:
+  - `GET /api/runs/{id}/export.html` returns a printable HTML report
+    with embedded CSS, server-side SVG line charts (IOPS / bandwidth /
+    latency / temperature over time), the full phase table, SMART
+    before/after diffs, the PCIe link card (capability vs. runtime
+    state with degraded-link warning), host environment snapshot, and
+    SNIA steady-state analysis where applicable. Suitable for
+    archival, email attachment, or print-to-PDF.
+  - `GET /api/runs/{id}/export.json` returns a complete JSON archive
+    containing the run record, all phases, per-phase fio samples, the
+    captured SMART before/after snapshots, the PCIe snapshot at run
+    time, the device metadata, and the SNIA analysis output (when
+    eligible) — a machine-readable sibling of the HTML report.
+- **"Export HTML" and "Export JSON" buttons** on the Run Detail page
+  topbar (with zh/en i18n) that open the report directly in a new
+  tab, passing the session token via `?token=…` query parameter so
+  anchor-based GET downloads work without custom fetch plumbing.
+
+### Changed
+- `resolve_principal()` now accepts the session token via an optional
+  `?token=…` query parameter in addition to the `Authorization:
+  Bearer …` header. Header auth remains preferred for API callers;
+  the query form exists specifically to enable browser-initiated GET
+  downloads (anchor tags, `window.open`, file-save prompts) that
+  cannot set custom headers.
+
+### Notes
+- The HTML export renders SVG charts server-side with hand-rolled path
+  math (no JS runtime dependency, no external chart libs), so the
+  exported file displays identically across browsers and survives
+  print-to-PDF conversion.
+- The JSON bundle includes every raw fio sample point, which can be
+  large (hundreds of KB) for long-running endurance soaks; the HTML
+  export downsamples the time series to ~400 points per metric for
+  readability while keeping peaks visible.
+
 ## 0.11.0 — 2026-04-22
 
 ### Added

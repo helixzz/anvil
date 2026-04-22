@@ -110,6 +110,8 @@
     "allMetrics": "全部指标",
     "abortBtn": "中止运行",
     "abortConfirm": "确认中止此次运行？正在运行的 fio 进程会收到 SIGTERM，运行状态将被标记为“已中止”。",
+    "exportHtml": "导出 HTML",
+    "exportJson": "导出 JSON",
     "latencyDistribution": "延迟分布",
     "pdf": "PDF（密度）",
     "cdf": "CDF",

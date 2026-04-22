@@ -4,6 +4,7 @@ import re
 
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,6 +16,7 @@ from anvil.models import Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.orchestrator import audit, get_queue
 from anvil.profiles import get_profile, list_profiles
 from anvil.profiles.snia import RoundObservation, evaluate_steady_state
+from anvil.reports import render_run_html, render_run_json_bundle
 from anvil.schemas import MetricPoint, ProfileOut, RunCreate, RunOut, RunSummary
 
 router = APIRouter(prefix="/runs", tags=["runs"], dependencies=[Depends(require_bearer)])
@@ -375,3 +377,108 @@ async def get_snia_analysis(
             "slope_ok": ss.slope_ok,
         },
     }
+
+
+async def _assemble_export(
+    run_id: str, session: AsyncSession
+) -> tuple[dict, list[dict], list[dict], dict | None]:
+    stmt = select(Run).options(selectinload(Run.phases)).where(Run.id == run_id)
+    run = (await session.execute(stmt)).scalar_one_or_none()
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    run_dict = {
+        "id": run.id,
+        "device_id": run.device_id,
+        "profile_name": run.profile_name,
+        "status": run.status,
+        "queued_at": run.queued_at,
+        "started_at": run.started_at,
+        "finished_at": run.finished_at,
+        "error_message": run.error_message,
+        "device_path_at_run": run.device_path_at_run,
+        "host_system": run.host_system,
+        "smart_before": run.smart_before,
+        "smart_after": run.smart_after,
+    }
+    phases = [
+        {
+            "id": p.id,
+            "phase_order": p.phase_order,
+            "phase_name": p.phase_name,
+            "pattern": p.pattern,
+            "block_size": p.block_size,
+            "iodepth": p.iodepth,
+            "numjobs": p.numjobs,
+            "runtime_s": p.runtime_s,
+            "started_at": p.started_at,
+            "finished_at": p.finished_at,
+            "read_iops": p.read_iops,
+            "read_bw_bytes": p.read_bw_bytes,
+            "read_clat_mean_ns": p.read_clat_mean_ns,
+            "read_clat_p99_ns": p.read_clat_p99_ns,
+            "read_clat_p9999_ns": p.read_clat_p9999_ns,
+            "write_iops": p.write_iops,
+            "write_bw_bytes": p.write_bw_bytes,
+            "write_clat_mean_ns": p.write_clat_mean_ns,
+            "write_clat_p99_ns": p.write_clat_p99_ns,
+        }
+        for p in sorted(run.phases, key=lambda x: x.phase_order)
+    ]
+    ts_rows = (
+        await session.execute(
+            select(RunMetric).where(RunMetric.run_id == run_id).order_by(RunMetric.ts.asc())
+        )
+    ).scalars()
+    timeseries = [
+        {"ts": m.ts.isoformat(), "metric_name": m.metric_name, "value": m.value}
+        for m in ts_rows
+    ]
+    device = None
+    dev = await session.get(Device, run.device_id)
+    if dev is not None:
+        device = {
+            "id": dev.id,
+            "model": dev.model,
+            "serial": dev.serial,
+            "firmware": dev.firmware,
+            "vendor": dev.vendor,
+            "protocol": dev.protocol,
+            "capacity_bytes": dev.capacity_bytes,
+            "pcie": (dev.metadata_json or {}).get("pcie"),
+        }
+    return run_dict, phases, timeseries, device
+
+
+@router.get("/{run_id}/export.html", response_class=HTMLResponse)
+async def export_run_html(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> HTMLResponse:
+    """Self-contained, printable HTML report for one run. Zero JS."""
+    run_dict, phases, timeseries, device = await _assemble_export(run_id, session)
+    html = render_run_html(
+        run=run_dict, phases=phases, timeseries=timeseries, device=device,
+    )
+    return HTMLResponse(
+        content=html,
+        headers={
+            "Content-Disposition": f'inline; filename="anvil-run-{run_id}.html"',
+        },
+    )
+
+
+@router.get("/{run_id}/export.json")
+async def export_run_json(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> Response:
+    """Lossless JSON bundle of every persisted artefact for one run."""
+    run_dict, phases, timeseries, device = await _assemble_export(run_id, session)
+    payload = render_run_json_bundle(
+        run=run_dict, phases=phases, timeseries=timeseries, device=device,
+    )
+    return Response(
+        content=payload,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="anvil-run-{run_id}.json"',
+        },
+    )

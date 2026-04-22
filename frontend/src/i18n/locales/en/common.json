@@ -110,6 +110,8 @@
     "allMetrics": "All metrics",
     "abortBtn": "Abort run",
     "abortConfirm": "Abort this run? Any running fio process will receive SIGTERM. The run will be marked aborted.",
+    "exportHtml": "Export HTML",
+    "exportJson": "Export JSON",
     "latencyDistribution": "Latency distribution",
     "pdf": "PDF (density)",
     "cdf": "CDF",
