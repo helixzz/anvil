@@ -8,6 +8,19 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.7.1 — 2026-04-22
+
+### Fixed
+- **PCIe probe silently returned None for every NVMe device.** The
+  controller-name extraction used `kname.split("n", 1)[0]`, which on
+  `nvme1n1` splits on the FIRST `n` and returns an empty string. The
+  Python probe still worked when called directly with `"nvme0"`, but
+  discovery's call-site got `""` → `lspci` had no address to query → no
+  pcie data ever reached the Device row. Replaced with
+  `re.match(r"^(nvme\\d+)", kname)` which correctly handles
+  `nvme0n1` → `nvme0`, `nvme12n3` → `nvme12`, and multipath
+  `nvme0c0n1` → `nvme0`.
+
 ## 0.7.0 — 2026-04-22
 
 ### Added

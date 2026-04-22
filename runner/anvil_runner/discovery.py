@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -391,13 +392,16 @@ async def discover() -> list[DiscoveredDevice]:
 
         pcie_info: dict[str, Any] | None = None
         if kname.startswith("nvme"):
-            # nvme0n1 → nvme0; nvme0c0n1 → nvme0
-            controller = kname.split("n", 1)[0]
-            from anvil_runner.pcie import probe_nvme_pcie
-            try:
-                pcie_info = await probe_nvme_pcie(controller)
-            except Exception as exc:
-                log.warning("pcie_probe_failed", kname=kname, error=str(exc))
+            # Strip the namespace suffix to get the controller: nvme0n1 -> nvme0,
+            # nvme12n3 -> nvme12, nvme0c0n1 (multipath) -> nvme0.
+            m = re.match(r"^(nvme\d+)", kname)
+            controller = m.group(1) if m else None
+            if controller:
+                from anvil_runner.pcie import probe_nvme_pcie
+                try:
+                    pcie_info = await probe_nvme_pcie(controller)
+                except Exception as exc:
+                    log.warning("pcie_probe_failed", kname=kname, error=str(exc))
 
         size_bytes = int(entry.get("size") or 0)
         rota = bool(entry.get("rota"))
