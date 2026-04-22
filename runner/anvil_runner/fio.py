@@ -169,12 +169,11 @@ class FioRunner:
             return
 
         if result_path.exists():
-            try:
-                fio_result = json.loads(result_path.read_text())
-            except json.JSONDecodeError as exc:
+            fio_result = _parse_last_json_object(result_path.read_text())
+            if fio_result is None:
                 yield {"event": "phase_failed", "payload": {
                     "phase_name": phase.name,
-                    "error": f"could not parse fio json: {exc}",
+                    "error": "fio output had no parseable JSON object",
                 }}
                 return
         else:
@@ -201,6 +200,31 @@ async def _drain(stream: asyncio.StreamReader | None) -> str:
         if not data:
             return "".join(chunks)
         chunks.append(data.decode(errors="replace"))
+
+
+def _parse_last_json_object(text: str) -> dict[str, Any] | None:
+    """fio's --output file can contain multiple concatenated JSON blobs when
+    --status-interval is set. Scan for complete objects by depth and return
+    the final one, which is fio's cumulative summary for the run.
+    """
+    last: dict[str, Any] | None = None
+    depth = 0
+    buf: list[str] = []
+    for ch in text:
+        if ch == "{":
+            depth += 1
+        if depth > 0:
+            buf.append(ch)
+        if ch == "}":
+            depth -= 1
+            if depth == 0 and buf:
+                raw = "".join(buf).strip()
+                buf.clear()
+                try:
+                    last = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+    return last
 
 
 def _terminate(proc: asyncio.subprocess.Process) -> None:
