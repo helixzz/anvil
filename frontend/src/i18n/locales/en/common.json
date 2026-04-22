@@ -104,6 +104,9 @@
     "selectedProfile": "Selected profile",
     "estimatedDuration": "Estimated duration",
     "phases": "Phases",
+    "phasesUnit": "phases",
+    "destructiveFlag": "Destructive",
+    "nonDestructiveFlag": "Read-only",
     "noTestable": "No testable devices available. Rescan first."
   },
   "status_labels": {

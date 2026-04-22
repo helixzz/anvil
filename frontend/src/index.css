@@ -169,3 +169,131 @@ a { color: var(--accent); }
   max-width: 400px;
   margin: 15vh auto;
 }
+
+/* ProfilePicker — multi-line dropdown for selecting a benchmark profile.
+   Plain <select> truncates long descriptions; this component renders a
+   custom combobox with title, destructive flag, duration, and full
+   description on separate lines for each option. */
+.profile-picker {
+  position: relative;
+  width: 100%;
+}
+
+.profile-picker-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  text-align: left;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  min-height: 54px;
+}
+.profile-picker-trigger:hover { background: var(--bg-elev-2); }
+.profile-picker-trigger:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.profile-picker-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+.profile-picker-trigger-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.profile-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.profile-picker-title {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.profile-picker-meta {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-picker-flag {
+  font-size: 10px;
+  padding: 1px 6px;
+  letter-spacing: 0.3px;
+}
+
+.profile-picker-desc-one-line {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-picker-caret {
+  color: var(--fg-dim);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.profile-picker-listbox {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  list-style: none;
+  padding: 4px;
+  margin: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.profile-picker-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+.profile-picker-option.highlighted {
+  background: var(--bg-elev-2);
+}
+.profile-picker-option.selected {
+  background: rgba(244, 163, 64, 0.12);
+  outline: 1px solid rgba(244, 163, 64, 0.35);
+}
+.profile-picker-option.selected.highlighted {
+  background: rgba(244, 163, 64, 0.18);
+}
+
+.profile-picker-option-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-picker-desc {
+  font-size: 12px;
+  line-height: 1.45;
+}

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import { api, type Device, type Profile } from "@/api";
 import { formatDuration, humanBytes } from "@/lib/format";
+import { ProfilePicker } from "@/components/ProfilePicker";
 
 export default function NewRun() {
   const { t } = useTranslation();
@@ -67,13 +68,12 @@ export default function NewRun() {
             <label className="dim" style={{ fontSize: 12 }}>
               {t("newRun.pickProfile")}
             </label>
-            <select value={profileName} onChange={(e) => setProfileName(e.target.value)}>
-              {(profilesQ.data ?? []).map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.title} — {p.description.slice(0, 80)}
-                </option>
-              ))}
-            </select>
+            <ProfilePicker
+              profiles={profilesQ.data ?? []}
+              value={profileName}
+              onChange={setProfileName}
+              disabled={profilesQ.isLoading}
+            />
           </div>
 
           {selectedProfile && (

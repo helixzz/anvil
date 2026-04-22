@@ -1,6 +1,6 @@
 # Anvil — NVMe Validator & IOps Lab
 
-![version](https://img.shields.io/badge/version-0.2.0-orange)
+![version](https://img.shields.io/badge/version-0.2.1-orange)
 
 A web-based disk benchmark platform for lab environments. Built for engineers who
 frequently swap drives through a dedicated test bench and want to capture,

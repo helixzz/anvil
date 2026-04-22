@@ -5,7 +5,6 @@ from pathlib import Path
 
 import anvil
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_ROOT.parent
 RUNNER_ROOT = REPO_ROOT / "runner"

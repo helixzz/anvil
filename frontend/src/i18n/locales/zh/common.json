@@ -104,6 +104,9 @@
     "selectedProfile": "已选方案",
     "estimatedDuration": "预估时长",
     "phases": "阶段",
+    "phasesUnit": "个阶段",
+    "destructiveFlag": "破坏性",
+    "nonDestructiveFlag": "只读",
     "noTestable": "没有可测试的设备，请先扫描。"
   },
   "status_labels": {

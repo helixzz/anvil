@@ -8,6 +8,26 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.2.1 — 2026-04-22
+
+### Added
+- **Multi-line profile picker** on the New Run page. The native `<select>`
+  truncated profile descriptions (previously clamped to 80 characters
+  and collapsed onto a single line). Replaced with a custom
+  combobox-style dropdown that shows, on three lines per option:
+  - Title (bold) + destructive / read-only badge + estimated duration
+    and phase count
+  - Full profile description (`.dim`, 12 px)
+  The trigger button mirrors the same layout in compact form so the
+  closed state remains one row tall. Fully keyboard-accessible: arrow
+  keys navigate, Home/End jump to ends, Enter / Space selects, Escape
+  closes, Tab closes and moves focus, and clicks outside close the
+  popover. ARIA: `role="combobox"` trigger, `role="listbox"` popover,
+  `role="option"` items with `aria-selected`, `aria-activedescendant`
+  tracking on the listbox. Translations added to both English and
+  Chinese locales (`newRun.phasesUnit`, `newRun.destructiveFlag`,
+  `newRun.nonDestructiveFlag`).
+
 ## 0.2.0 — 2026-04-22
 
 ### Added
