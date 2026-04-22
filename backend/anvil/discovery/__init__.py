@@ -29,6 +29,7 @@ class DiscoveredDevice:
     is_testable: bool
     exclusion_reason: str | None
     partitions: list[str] = field(default_factory=list)
+    mount_points: list[str] = field(default_factory=list)
 
     @property
     def fingerprint(self) -> str:
@@ -54,6 +55,7 @@ class DiscoveredDevice:
             is_testable=bool(data.get("is_testable")),
             exclusion_reason=data.get("exclusion_reason"),
             partitions=list(data.get("partitions") or []),
+            mount_points=list(data.get("mount_points") or []),
         )
 
 

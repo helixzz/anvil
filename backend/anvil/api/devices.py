@@ -55,6 +55,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
                 metadata_json={
                     "rotational": d.rotational,
                     "partitions": d.partitions,
+                    "mount_points": d.mount_points,
                 },
             )
             session.add(device)
@@ -74,6 +75,7 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
                 **(device.metadata_json or {}),
                 "rotational": d.rotational,
                 "partitions": d.partitions,
+                "mount_points": d.mount_points,
             }
 
         snapshot = DeviceSnapshot(

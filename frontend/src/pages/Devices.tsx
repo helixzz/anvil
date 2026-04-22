@@ -4,6 +4,12 @@ import dayjs from "dayjs";
 import { api } from "@/api";
 import { humanBytes } from "@/lib/format";
 
+function mountPoints(meta: Record<string, unknown> | undefined | null): string[] {
+  const raw = meta?.mount_points;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === "string" && v.length > 0);
+}
+
 export default function Devices() {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -37,34 +43,55 @@ export default function Devices() {
                 <th>{t("devices.size")}</th>
                 <th>{t("devices.path")}</th>
                 <th>{t("devices.protocol")}</th>
+                <th>{t("devices.mountPoints")}</th>
                 <th>{t("devices.testable")}</th>
                 <th>{t("devices.lastSeen")}</th>
               </tr>
             </thead>
             <tbody>
-              {q.data.map((d) => (
-                <tr key={d.id}>
-                  <td>{d.model}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>{d.serial}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>{d.firmware ?? "—"}</td>
-                  <td>{humanBytes(d.capacity_bytes)}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>{d.current_device_path ?? "—"}</td>
-                  <td>{d.protocol}</td>
-                  <td>
-                    {d.is_testable ? (
-                      <span className="badge badge-ok">{t("devices.testable")}</span>
-                    ) : (
-                      <span className="badge badge-warn" title={d.exclusion_reason ?? ""}>
-                        {t("devices.excluded")}
-                      </span>
-                    )}
-                    {d.exclusion_reason && !d.is_testable && (
-                      <div className="dim" style={{ fontSize: 11 }}>{d.exclusion_reason}</div>
-                    )}
-                  </td>
-                  <td className="dim">{dayjs(d.last_seen).format("YYYY-MM-DD HH:mm")}</td>
-                </tr>
-              ))}
+              {q.data.map((d) => {
+                const mps = mountPoints(d.metadata_json as Record<string, unknown>);
+                return (
+                  <tr key={d.id}>
+                    <td>{d.model}</td>
+                    <td className="mono" style={{ fontSize: 12 }}>{d.serial}</td>
+                    <td className="mono" style={{ fontSize: 12 }}>{d.firmware ?? "—"}</td>
+                    <td>{humanBytes(d.capacity_bytes)}</td>
+                    <td className="mono" style={{ fontSize: 12 }}>{d.current_device_path ?? "—"}</td>
+                    <td>{d.protocol}</td>
+                    <td>
+                      {mps.length === 0 ? (
+                        <span className="dim">—</span>
+                      ) : (
+                        <div className="col" style={{ gap: 2 }}>
+                          {mps.map((m) => (
+                            <span
+                              key={m}
+                              className="badge badge-warn mono"
+                              style={{ fontSize: 11, width: "fit-content" }}
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {d.is_testable ? (
+                        <span className="badge badge-ok">{t("devices.testable")}</span>
+                      ) : (
+                        <span className="badge badge-warn" title={d.exclusion_reason ?? ""}>
+                          {t("devices.excluded")}
+                        </span>
+                      )}
+                      {d.exclusion_reason && !d.is_testable && (
+                        <div className="dim" style={{ fontSize: 11 }}>{d.exclusion_reason}</div>
+                      )}
+                    </td>
+                    <td className="dim">{dayjs(d.last_seen).format("YYYY-MM-DD HH:mm")}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

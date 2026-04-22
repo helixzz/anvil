@@ -47,6 +47,7 @@
     "size": "Size",
     "path": "Path",
     "protocol": "Protocol",
+    "mountPoints": "Mount points",
     "testable": "Testable",
     "excluded": "Excluded",
     "reason": "Reason",

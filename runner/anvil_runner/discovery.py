@@ -31,6 +31,7 @@ class DiscoveredDevice:
     is_testable: bool
     exclusion_reason: str | None
     partitions: list[str] = field(default_factory=list)
+    mount_points: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +51,7 @@ class DiscoveredDevice:
             "is_testable": self.is_testable,
             "exclusion_reason": self.exclusion_reason,
             "partitions": self.partitions,
+            "mount_points": self.mount_points,
         }
 
 
@@ -175,6 +177,44 @@ def _infer_protocol(entry: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _mountpoints_of(entry: dict[str, Any]) -> list[str]:
+    """Collect every non-null mountpoint reported by lsblk for one entry.
+
+    Modern lsblk exposes `mountpoints` (plural, may list several bind mounts)
+    alongside the legacy `mountpoint` field; we merge both and dedupe while
+    preserving order so the UI shows a stable list.
+    """
+    seen: dict[str, None] = {}
+    single = entry.get("mountpoint")
+    if single:
+        seen[str(single)] = None
+    for mp in entry.get("mountpoints") or []:
+        if mp:
+            seen[str(mp)] = None
+    return list(seen.keys())
+
+
+def _collect_mountpoints(entry: dict[str, Any]) -> tuple[list[str], list[tuple[str, str]]]:
+    """Return (disk-level-mountpoints, [(partition_path, mountpoint), ...])."""
+    disk_mps = _mountpoints_of(entry)
+    partition_mps: list[tuple[str, str]] = []
+    for child in entry.get("children") or []:
+        cpath = child.get("path") or ""
+        for mp in _mountpoints_of(child):
+            partition_mps.append((cpath, mp))
+    return disk_mps, partition_mps
+    tran = (entry.get("tran") or "").lower()
+    if tran == "nvme":
+        return "nvme"
+    if tran in {"sata", "sas"}:
+        return tran
+    if tran == "iscsi":
+        return "iscsi"
+    if tran == "usb":
+        return "usb"
+    return "unknown"
+
+
 async def _collect_exclusions() -> tuple[set[str], set[str]]:
     """Safety-critical: return kname-set and source-set of devices that must not be touched.
 
@@ -226,11 +266,21 @@ async def discover() -> list[DiscoveredDevice]:
         children = entry.get("children") or []
         partition_paths = [c.get("path") for c in children if c.get("path")]
         partition_knames = {c.get("kname") for c in children if c.get("kname")}
+        disk_mountpoints, partition_mountpoints = _collect_mountpoints(entry)
+        all_mountpoints = list(disk_mountpoints)
+        for _path, mp in partition_mountpoints:
+            if mp not in all_mountpoints:
+                all_mountpoints.append(mp)
 
         is_testable = True
         exclusion_reason: str | None = None
 
-        if kname in excluded_knames:
+        if disk_mountpoints:
+            is_testable = False
+            exclusion_reason = (
+                f"whole device is mounted at {', '.join(disk_mountpoints)}"
+            )
+        elif kname in excluded_knames:
             is_testable, exclusion_reason = False, "part of root FS / swap / DM stack"
         elif path in excluded_sources:
             is_testable, exclusion_reason = False, "device path is mounted or in /proc/swaps"
@@ -244,12 +294,10 @@ async def discover() -> list[DiscoveredDevice]:
                     is_testable, exclusion_reason = False, f"partition {pp} is mounted"
                     break
 
-        if is_testable:
-            for child in children:
-                if child.get("mountpoint") or (child.get("mountpoints") or [None])[0]:
-                    is_testable = False
-                    exclusion_reason = f"partition {child.get('path')} is mounted"
-                    break
+        if is_testable and partition_mountpoints:
+            first_path, first_mp = partition_mountpoints[0]
+            is_testable = False
+            exclusion_reason = f"partition {first_path} is mounted at {first_mp}"
 
         holders_path = Path(f"/sys/block/{kname}/holders")
         if is_testable and holders_path.exists():
@@ -303,6 +351,7 @@ async def discover() -> list[DiscoveredDevice]:
                 is_testable=is_testable,
                 exclusion_reason=exclusion_reason,
                 partitions=partition_paths,
+                mount_points=all_mountpoints,
             )
         )
 

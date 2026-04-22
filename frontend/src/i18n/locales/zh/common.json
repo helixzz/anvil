@@ -47,10 +47,11 @@
     "size": "容量",
     "path": "路径",
     "protocol": "协议",
+    "mountPoints": "挂载点清单",
     "testable": "可测试",
     "excluded": "已排除",
     "reason": "原因",
-    "noDevices": "尚未发现任何块设备。点击“重新扫描”以枚举。",
+    "noDevices": "尚未发现任何块设备。点击\"重新扫描\"以枚举。",
     "lastSeen": "最近发现"
   },
   "runs": {
