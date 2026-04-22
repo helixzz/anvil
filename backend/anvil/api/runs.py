@@ -8,10 +8,10 @@ from sqlalchemy.orm import selectinload
 
 from anvil.api import require_bearer
 from anvil.db import get_session
-from anvil.models import Device, Run, RunStatus
+from anvil.models import Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.orchestrator import audit, get_queue
 from anvil.profiles import get_profile, list_profiles
-from anvil.schemas import ProfileOut, RunCreate, RunOut, RunSummary
+from anvil.schemas import MetricPoint, ProfileOut, RunCreate, RunOut, RunSummary
 
 router = APIRouter(prefix="/runs", tags=["runs"], dependencies=[Depends(require_bearer)])
 
@@ -116,3 +116,66 @@ async def get_run(run_id: str, session: AsyncSession = Depends(get_session)) -> 
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     return run
+
+
+@router.get("/{run_id}/timeseries", response_model=list[MetricPoint])
+async def get_timeseries(
+    run_id: str,
+    metric: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> list[MetricPoint]:
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    stmt = select(RunMetric).where(RunMetric.run_id == run_id)
+    if metric:
+        stmt = stmt.where(RunMetric.metric_name == metric)
+    stmt = stmt.order_by(RunMetric.ts.asc())
+    result = await session.execute(stmt)
+    return [
+        MetricPoint(ts=m.ts, metric_name=m.metric_name, value=m.value)
+        for m in result.scalars()
+    ]
+
+
+@router.get("/{run_id}/phases")
+async def get_run_phases(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> list[dict]:
+    """Compact phase summary with timing info, used by the UI to annotate charts."""
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    result = await session.execute(
+        select(RunPhase)
+        .where(RunPhase.run_id == run_id)
+        .order_by(RunPhase.phase_order.asc())
+    )
+    out: list[dict] = []
+    for p in result.scalars():
+        out.append(
+            {
+                "id": p.id,
+                "phase_order": p.phase_order,
+                "phase_name": p.phase_name,
+                "pattern": p.pattern,
+                "block_size": p.block_size,
+                "iodepth": p.iodepth,
+                "numjobs": p.numjobs,
+                "rwmix_write_pct": p.rwmix_write_pct,
+                "runtime_s": p.runtime_s,
+                "started_at": p.started_at,
+                "finished_at": p.finished_at,
+                "read_iops": p.read_iops,
+                "read_bw_bytes": p.read_bw_bytes,
+                "read_clat_mean_ns": p.read_clat_mean_ns,
+                "read_clat_p99_ns": p.read_clat_p99_ns,
+                "read_clat_p9999_ns": p.read_clat_p9999_ns,
+                "write_iops": p.write_iops,
+                "write_bw_bytes": p.write_bw_bytes,
+                "write_clat_mean_ns": p.write_clat_mean_ns,
+                "write_clat_p99_ns": p.write_clat_p99_ns,
+                "write_clat_p9999_ns": p.write_clat_p9999_ns,
+            }
+        )
+    return out

@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from anvil import __version__
 from anvil.api import require_bearer
 from anvil.api.devices import router as devices_router
+from anvil.api.models import router as models_router
 from anvil.api.runs import router as runs_router
 from anvil.api.ws import router as ws_router
 from anvil.config import get_settings
@@ -56,6 +57,7 @@ app.add_middleware(
 
 app.include_router(devices_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
+app.include_router(models_router, prefix="/api")
 app.include_router(ws_router)
 
 

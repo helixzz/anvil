@@ -7,7 +7,8 @@
     "dashboard": "总览",
     "devices": "设备",
     "runs": "运行记录",
-    "newRun": "新建运行"
+    "newRun": "新建运行",
+    "models": "设备型号库"
   },
   "common": {
     "loading": "加载中…",
@@ -70,6 +71,11 @@
     "failed": "失败",
     "aborted": "已中止",
     "liveIops": "实时 IOPS",
+    "bandwidthOverTime": "带宽随时间变化",
+    "latencyOverTime": "延迟随时间变化",
+    "temperatureOverTime": "温度随时间变化",
+    "bsSweep": "块大小扫描",
+    "qdSweep": "队列深度扫描",
     "progress": "进度",
     "summary": "汇总",
     "phases": "阶段",
@@ -82,7 +88,9 @@
     "p9999Lat": "p99.99 时延",
     "noPhases": "尚未记录阶段。",
     "errorMessage": "错误信息",
-    "waitingForRunner": "等待 Runner 响应…"
+    "waitingForRunner": "等待 Runner 响应…",
+    "temperature": "温度",
+    "allMetrics": "全部指标"
   },
   "newRun": {
     "title": "启动新的基准测试",
@@ -115,5 +123,34 @@
     "s": "s",
     "mbps": "MB/s",
     "gbps": "GB/s"
+  },
+  "models": {
+    "title": "设备型号库",
+    "subtitle": "所有被测试过的存储设备型号，按品牌和型号归类。",
+    "brand": "品牌",
+    "model": "型号",
+    "protocol": "协议",
+    "capacity": "典型容量",
+    "deviceCount": "设备数",
+    "runCount": "运行次数",
+    "firmwares": "固件",
+    "lastRunAt": "最近测试",
+    "noModels": "尚未有任何设备被测试。",
+    "noRuns": "该型号尚无完成的测试。",
+    "devices": "设备列表",
+    "runs": "测试记录",
+    "profilesUsed": "使用过的测试方案",
+    "headlineMetrics": "代表性指标",
+    "bestIops": "最高 IOPS",
+    "bestBw": "最高带宽",
+    "samples": "样本数",
+    "stability": "稳定性评价",
+    "iopsScore": "IOPS 稳定度",
+    "temperatureScore": "温度稳定度",
+    "iopsCv": "IOPS 变异系数",
+    "tempRange": "温度范围",
+    "comparePhase": "跨运行对比该测试用例",
+    "selectPhase": "选择一个测试/阶段",
+    "phaseSamplesHelp": "每一根柱子代表该型号一台设备的一次测试运行。"
   }
 }

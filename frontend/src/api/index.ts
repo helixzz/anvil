@@ -148,6 +148,111 @@ export interface SystemStatus {
   uptime_seconds: number;
 }
 
+export interface MetricPoint {
+  ts: string;
+  metric_name: string;
+  value: number;
+}
+
+export interface PhaseSummary {
+  id: string;
+  phase_order: number;
+  phase_name: string;
+  pattern: string;
+  block_size: number;
+  iodepth: number;
+  numjobs: number;
+  rwmix_write_pct: number;
+  runtime_s: number;
+  started_at: string | null;
+  finished_at: string | null;
+  read_iops: number | null;
+  read_bw_bytes: number | null;
+  read_clat_mean_ns: number | null;
+  read_clat_p99_ns: number | null;
+  read_clat_p9999_ns: number | null;
+  write_iops: number | null;
+  write_bw_bytes: number | null;
+  write_clat_mean_ns: number | null;
+  write_clat_p99_ns: number | null;
+  write_clat_p9999_ns: number | null;
+}
+
+export interface ModelIndexEntry {
+  slug: string;
+  brand: string;
+  model: string;
+  protocol: string;
+  form_factor: string | null;
+  capacity_bytes_typical: number | null;
+  device_count: number;
+  run_count: number;
+  firmwares: string[];
+  last_run_at: string | null;
+}
+
+export interface ModelDetail {
+  slug: string;
+  brand: string;
+  model: string;
+  protocol: string;
+  form_factor: string | null;
+  capacity_bytes_typical: number | null;
+  firmwares: string[];
+  devices: {
+    id: string;
+    serial: string;
+    firmware: string | null;
+    first_seen: string;
+    last_seen: string;
+    is_testable: boolean;
+  }[];
+  runs: {
+    id: string;
+    device_id: string;
+    profile_name: string;
+    status: string;
+    queued_at: string;
+    started_at: string | null;
+    finished_at: string | null;
+  }[];
+  profiles_used: Record<string, number>;
+  headline_metrics: {
+    per_phase: {
+      phase_name: string;
+      pattern: string;
+      block_size: number;
+      iodepth: number;
+      best_iops: number | null;
+      best_bw_bytes: number | null;
+      sample_count: number;
+    }[];
+  };
+  stability: {
+    iops_score: number | null;
+    iops_cv: number | null;
+    iops_sample_count: number | null;
+    temperature_score: number | null;
+    temp_range_c: number | null;
+    temp_sample_count: number | null;
+  };
+}
+
+export interface PhaseCompareSample {
+  run_id: string;
+  device_id: string;
+  finished_at: string | null;
+  read_iops: number | null;
+  read_bw_bytes: number | null;
+  read_clat_mean_ns: number | null;
+  read_clat_p99_ns: number | null;
+  read_clat_p9999_ns: number | null;
+  write_iops: number | null;
+  write_bw_bytes: number | null;
+  write_clat_mean_ns: number | null;
+  write_clat_p99_ns: number | null;
+}
+
 export const api = {
   status: () => jsonFetch<SystemStatus>("/api/status"),
   listDevices: () => jsonFetch<Device[]>("/api/devices"),
@@ -155,6 +260,11 @@ export const api = {
   listRuns: () => jsonFetch<RunSummary[]>("/api/runs"),
   listProfiles: () => jsonFetch<Profile[]>("/api/runs/profiles"),
   getRun: (id: string) => jsonFetch<Run>(`/api/runs/${id}`),
+  getRunTimeseries: (id: string, metric?: string) => {
+    const qs = metric ? `?metric=${encodeURIComponent(metric)}` : "";
+    return jsonFetch<MetricPoint[]>(`/api/runs/${id}/timeseries${qs}`);
+  },
+  getRunPhases: (id: string) => jsonFetch<PhaseSummary[]>(`/api/runs/${id}/phases`),
   createRun: (body: {
     device_id: string;
     profile_name: string;
@@ -164,6 +274,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  listModels: () => jsonFetch<ModelIndexEntry[]>("/api/models"),
+  getModel: (slug: string) => jsonFetch<ModelDetail>(`/api/models/${encodeURIComponent(slug)}`),
+  compareModelPhase: (slug: string, phase_name: string) =>
+    jsonFetch<{ phase_name: string; samples: PhaseCompareSample[] }>(
+      `/api/models/${encodeURIComponent(slug)}/compare?phase_name=${encodeURIComponent(phase_name)}`,
+    ),
 };
 
 export function wsUrl(path: string): string {

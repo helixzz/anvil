@@ -7,7 +7,8 @@
     "dashboard": "Dashboard",
     "devices": "Devices",
     "runs": "Runs",
-    "newRun": "New run"
+    "newRun": "New run",
+    "models": "Models"
   },
   "common": {
     "loading": "Loading…",
@@ -70,6 +71,11 @@
     "failed": "Failed",
     "aborted": "Aborted",
     "liveIops": "Live IOPS",
+    "bandwidthOverTime": "Bandwidth over time",
+    "latencyOverTime": "Latency over time",
+    "temperatureOverTime": "Temperature over time",
+    "bsSweep": "Block-size sweep",
+    "qdSweep": "Queue-depth sweep",
     "progress": "Progress",
     "summary": "Summary",
     "phases": "Phases",
@@ -82,7 +88,9 @@
     "p9999Lat": "p99.99 latency",
     "noPhases": "No phases recorded yet.",
     "errorMessage": "Error message",
-    "waitingForRunner": "Waiting for runner…"
+    "waitingForRunner": "Waiting for runner…",
+    "temperature": "Temperature",
+    "allMetrics": "All metrics"
   },
   "newRun": {
     "title": "Start a new benchmark",
@@ -115,5 +123,34 @@
     "s": "s",
     "mbps": "MB/s",
     "gbps": "GB/s"
+  },
+  "models": {
+    "title": "Device models",
+    "subtitle": "All storage devices that have ever been tested, grouped by brand and model.",
+    "brand": "Brand",
+    "model": "Model",
+    "protocol": "Protocol",
+    "capacity": "Typical capacity",
+    "deviceCount": "Devices",
+    "runCount": "Runs",
+    "firmwares": "Firmwares",
+    "lastRunAt": "Last run",
+    "noModels": "No models have been tested yet.",
+    "noRuns": "This model has no completed runs yet.",
+    "devices": "Devices",
+    "runs": "Runs",
+    "profilesUsed": "Profiles used",
+    "headlineMetrics": "Headline metrics",
+    "bestIops": "Best IOPS",
+    "bestBw": "Best BW",
+    "samples": "Samples",
+    "stability": "Stability",
+    "iopsScore": "IOPS stability",
+    "temperatureScore": "Thermal stability",
+    "iopsCv": "IOPS CV",
+    "tempRange": "Temp range",
+    "comparePhase": "Compare this test across runs",
+    "selectPhase": "Select a test / phase",
+    "phaseSamplesHelp": "Each bar is one run of this test on a device of this model."
   }
 }

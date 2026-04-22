@@ -223,6 +223,20 @@ async def _handle_event(
                         value=value,
                     )
                 )
+    elif kind == "smart_sample":
+        temp_c = payload.get("temperature_c")
+        if temp_c is None:
+            return
+        async with session_scope() as session:
+            session.add(
+                RunMetric(
+                    run_id=run_id,
+                    phase_id=None,
+                    ts=datetime.now(UTC),
+                    metric_name="temperature_c",
+                    value=float(temp_c),
+                )
+            )
     elif kind == "phase_complete":
         phase_id = phase_id_by_name.get(payload.get("phase_name", ""))
         if not phase_id:
