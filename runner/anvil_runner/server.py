@@ -17,6 +17,8 @@ from anvil_runner.fio import FioRunner, PhaseRequest
 log = structlog.get_logger("anvil_runner.server")
 
 SMART_POLL_INTERVAL_S = 5.0
+THERMAL_ABORT_THRESHOLD_C = 75
+THERMAL_ABORT_CONSECUTIVE = 6
 
 
 async def run_server(socket_path: Path, simulation: bool = False) -> asyncio.AbstractServer:
@@ -118,13 +120,33 @@ async def _run_benchmark_stream(
             await writer.drain()
 
     stop_smart = asyncio.Event()
+    thermal_abort = asyncio.Event()
     smart_task = asyncio.create_task(
-        _smart_poller(device_path, emit, stop_smart),
+        _smart_poller(device_path, emit, stop_smart, thermal_abort),
         name=f"smart-poller-{run_id}",
     )
 
+    current_phase_task: asyncio.Task[None] | None = None
+
+    async def _abort_on_thermal() -> None:
+        await thermal_abort.wait()
+        log.warning("thermal_abort_triggered", device=device_path)
+        await emit({
+            "event": "thermal_abort_armed",
+            "payload": {
+                "device_path": device_path,
+                "threshold_c": THERMAL_ABORT_THRESHOLD_C,
+            },
+        })
+        if current_phase_task is not None and not current_phase_task.done():
+            current_phase_task.cancel()
+
+    thermal_task = asyncio.create_task(_abort_on_thermal(), name=f"thermal-watch-{run_id}")
+
     try:
         for phase_spec in phases_raw:
+            if thermal_abort.is_set():
+                break
             phase = PhaseRequest(
                 name=phase_spec["name"],
                 pattern=phase_spec["pattern"],
@@ -138,33 +160,86 @@ async def _run_benchmark_stream(
                 size_bytes=int(phase_spec["size_bytes"]) if phase_spec.get("size_bytes") else None,
                 read_only=bool(phase_spec.get("read_only", False)),
             )
-            async for event in runner.run_phase(run_id, device_path, phase):
-                await emit(event)
-                if event["event"] == "phase_failed":
+
+            async def _drain_phase() -> None:
+                async for event in runner.run_phase(run_id, device_path, phase):
+                    await emit(event)
+                    if event["event"] == "phase_failed":
+                        await emit({
+                            "event": "run_failed",
+                            "payload": {"error": event["payload"].get("error") or "phase failed"},
+                        })
+                        raise _PhaseFailure()
+
+            current_phase_task = asyncio.create_task(_drain_phase())
+            try:
+                await current_phase_task
+            except asyncio.CancelledError:
+                # Thermal abort tripped while the phase was running.
+                if thermal_abort.is_set():
                     await emit({
-                        "event": "run_failed",
-                        "payload": {"error": event["payload"].get("error") or "phase failed"},
+                        "event": "run_aborted",
+                        "payload": {
+                            "reason": "thermal_abort",
+                            "threshold_c": THERMAL_ABORT_THRESHOLD_C,
+                            "consecutive_samples_required": THERMAL_ABORT_CONSECUTIVE,
+                        },
                     })
                     return
+                raise
+            except _PhaseFailure:
+                return
+
+        if thermal_abort.is_set():
+            await emit({
+                "event": "run_aborted",
+                "payload": {
+                    "reason": "thermal_abort",
+                    "threshold_c": THERMAL_ABORT_THRESHOLD_C,
+                    "consecutive_samples_required": THERMAL_ABORT_CONSECUTIVE,
+                },
+            })
+            return
         await emit({"event": "run_complete", "payload": {"run_id": run_id}})
     finally:
         stop_smart.set()
+        thermal_abort.set()
         with contextlib.suppress(Exception):
             await asyncio.wait_for(smart_task, timeout=5.0)
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(thermal_task, timeout=2.0)
+
+
+class _PhaseFailure(Exception):
+    pass
 
 
 async def _smart_poller(
     device_path: str,
     emit: Any,
     stop_event: asyncio.Event,
+    thermal_abort: asyncio.Event | None = None,
 ) -> None:
     """Emit a smart_sample event every SMART_POLL_INTERVAL_S seconds for the run."""
     is_nvme = device_path.startswith("/dev/nvme")
+    consecutive_overheat = 0
     while not stop_event.is_set():
         try:
             sample = await _read_smart_sample(device_path, is_nvme)
             if sample:
                 await emit({"event": "smart_sample", "payload": sample})
+                temp_c = sample.get("temperature_c")
+                if (
+                    thermal_abort is not None
+                    and isinstance(temp_c, (int, float))
+                    and temp_c >= THERMAL_ABORT_THRESHOLD_C
+                ):
+                    consecutive_overheat += 1
+                    if consecutive_overheat >= THERMAL_ABORT_CONSECUTIVE:
+                        thermal_abort.set()
+                        return
+                else:
+                    consecutive_overheat = 0
         except Exception as exc:
             log.warning("smart_poll_failed", device=device_path, error=str(exc))
         try:

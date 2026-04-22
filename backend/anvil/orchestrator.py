@@ -198,7 +198,17 @@ async def _execute_run(run_id: str) -> None:
                     RunStatus.ABORTED.value if event.kind == "run_aborted" else RunStatus.FAILED.value
                 )
                 run.finished_at = datetime.now(UTC)
-                run.error_message = event.payload.get("error")
+                reason = event.payload.get("reason")
+                err = event.payload.get("error")
+                if reason == "thermal_abort":
+                    t = event.payload.get("threshold_c")
+                    n = event.payload.get("consecutive_samples_required")
+                    run.error_message = (
+                        f"thermal_abort: temperature ≥ {t} °C "
+                        f"for {n} consecutive SMART samples"
+                    )
+                else:
+                    run.error_message = err or reason
             return
 
     try:

@@ -8,6 +8,36 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.6.0 — 2026-04-22
+
+### Added
+- **`endurance_soak` profile**. 2-hour sustained 4 KiB random write at
+  QD 32 with 8 jobs, preceded by a 60 s sequential-write
+  preconditioning pass. Preset for long-duration wear / thermal
+  behavior characterization.
+- **Thermal auto-abort**. The existing SMART-temperature poller now
+  tracks a consecutive-overheat counter during every run. If the drive
+  sustains ≥ 75 °C for 6 consecutive samples (≈ 30 s at the 5 s poll
+  interval) the runner cancels the currently-executing phase and emits
+  a `run_aborted` event with `reason: "thermal_abort"`. The
+  orchestrator surfaces this in the run's `error_message` column as
+  `thermal_abort: temperature ≥ 75 °C for 6 consecutive SMART samples`
+  so it's obvious why the run stopped. Applies to every profile, not
+  just endurance — a Quick run that overheats will still be aborted
+  safely.
+- New RPC event `thermal_abort_armed` broadcast to the WebSocket the
+  moment the threshold is breached (before the actual phase cancel
+  completes), so the UI can surface a red banner immediately.
+
+### Implementation notes
+- The phase loop in `_run_benchmark_stream` now runs each phase's
+  event-drain inside its own `asyncio.Task`. That task is cancelled
+  by the thermal watcher if the abort event fires; a `CancelledError`
+  is caught and translated to a graceful `run_aborted` emission, not
+  re-raised. This also lays the groundwork for per-phase user abort
+  (where the orchestrator can cancel a specific task rather than the
+  whole runner connection).
+
 ## 0.5.0 — 2026-04-22
 
 ### Added

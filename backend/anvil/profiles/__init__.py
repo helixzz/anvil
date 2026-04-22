@@ -318,6 +318,40 @@ SNIA_QUICK_PTS_PROFILE = Profile(
 )
 
 
+ENDURANCE_SOAK_PROFILE = Profile(
+    name="endurance_soak",
+    title="Endurance soak (2 h sustained 4 K random write)",
+    description=(
+        "Long sustained random-write endurance probe: 2 hours at 4 KiB QD 32 "
+        "with 8 jobs to exercise the drive under prolonged heavy write. SMART "
+        "temperature is polled every 5 s during the run (same as every other "
+        "profile); the runner aborts with a thermal-throttle reason if the "
+        "drive sustains ≥ 75 °C for 6 consecutive samples (≈ 30 s). "
+        "Destructive, ~2 hours."
+    ),
+    destructive=True,
+    phases=(
+        _mixed_phase(
+            "endurance_precondition_seq_1m",
+            pattern="write",
+            block_size=1 * MIB,
+            iodepth=32,
+            rwmix_write_pct=100,
+            runtime_s=60,
+        ),
+        _mixed_phase(
+            "endurance_soak_rnd_4k_q32t8",
+            pattern="randwrite",
+            block_size=4 * KIB,
+            iodepth=32,
+            numjobs=8,
+            rwmix_write_pct=100,
+            runtime_s=7200,
+        ),
+    ),
+)
+
+
 PROFILES: dict[str, Profile] = {
     p.name: p
     for p in (
@@ -330,6 +364,7 @@ PROFILES: dict[str, Profile] = {
         DESKTOP_GENERAL_PROFILE,
         STABILITY_PROFILE,
         SNIA_QUICK_PTS_PROFILE,
+        ENDURANCE_SOAK_PROFILE,
     )
 }
 
