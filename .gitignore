@@ -67,3 +67,6 @@ deploy/secrets/
 # Test artifacts
 test-results/
 playwright-report/
+
+# mkdocs build output
+/site/

@@ -7,6 +7,21 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.1.0 — 2026-04-23
+
+### Added
+- **Hosted documentation site** at
+  <https://helixzz.github.io/anvil/>. Built with MkDocs Material,
+  deployed from `main` on any `docs/**` or `mkdocs.yml` change via a
+  new `docs` GitHub Actions workflow that publishes to GitHub Pages.
+  Contents:
+  - Getting Started: installation, first run
+  - User Guide: profiles, running, reading reports, compare,
+    public share links
+  - Operator Guide: RBAC, SSO, env-tune, crash recovery, security
+  - Reference: HTTP API summary, CHANGELOG, design doc
+- README gains a badge and direct link to the docs site.
+
 ## 1.0.1 — 2026-04-23
 
 ### Added

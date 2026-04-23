@@ -217,7 +217,7 @@ Entry-point based plugin system:
 
 ## 11. Roadmap
 
-Version history lives in [`../CHANGELOG.md`](../CHANGELOG.md).
+Version history lives in [`CHANGELOG.md`](CHANGELOG.md).
 
 1. **POC (0.1.0, shipped)**: discovery, Quick profile, live WebSocket chart,
    saved report.
