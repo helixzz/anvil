@@ -5,6 +5,7 @@ from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     DateTime,
@@ -15,7 +16,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB as _PG_JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from anvil.db import Base
@@ -26,6 +27,8 @@ def utcnow() -> datetime:
 
 
 _tz_datetime = DateTime(timezone=True)
+
+JSONB = _PG_JSONB().with_variant(JSON(), "sqlite")
 
 
 class RunStatus(StrEnum):
@@ -187,7 +190,11 @@ class RunMetric(Base):
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
     ts: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False, index=True)
     actor: Mapped[str | None] = mapped_column(String(128))
     action: Mapped[str] = mapped_column(String(64), nullable=False)

@@ -8,6 +8,51 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.16.0 — 2026-04-23
+
+### Added
+- **End-to-end API integration tests.** New test infrastructure spins
+  up the real FastAPI app against an in-memory aiosqlite engine per
+  test (via a StaticPool) and drives it through httpx + ASGITransport
+  so every test exercises real routing, auth, and ORM paths without
+  needing a live Postgres:
+  - **RBAC enforcement (`test_rbac_e2e.py`, 9 tests)**: viewer cannot
+    POST `/api/runs` (403), operator cannot `GET /api/admin/users`
+    (403), admin can, viewer can list runs, missing token → 401,
+    invalid token → 403, wrong password → 401, unknown user → 401,
+    disabled user → 401.
+  - **SSO / share / env-tune contract (`test_api_integration.py`,
+    8 tests)**: SSO assertion endpoint rejects unauth callers with
+    401 and viewer tokens with 403; responds 403 with a clear
+    `SSO is not enabled` message when SSO is off; share create →
+    public GET → revoke → public GET returns 404; public share
+    redacts the device serial (full serial not in HTML body, last 4
+    chars still visible); nonexistent slugs return 404; env-tune
+    revert with unknown `receipt_id` returns 404; missing body is
+    a 422.
+  - **Startup reconciliation (`test_reconcile.py`, 4 tests)**: stale
+    `preflight`/`running` rows are marked `failed` with the "API
+    restarted" reason; `queued` rows are re-enqueued; `complete`
+    rows are untouched; the function is idempotent across repeated
+    calls.
+
+### Changed
+- SQLAlchemy `JSONB` column type now uses a `with_variant(JSON(),
+  "sqlite")` wrapper so tests can run against aiosqlite while
+  production deployments keep native Postgres JSONB semantics
+  (indexing, operators, etc.).
+- `AuditLog.id` likewise uses `BigInteger().with_variant(Integer(),
+  "sqlite")` so autoincrement works under SQLite (which only
+  autoincrements INTEGER PKs, not BIGINT).
+
+### Notes
+- Tests now cover every Oracle audit finding from the 1.0.0
+  pre-release security pass: RBAC (finding 8), SSO endpoint gate
+  (finding 1), share revoke behavior (finding 7 baseline), env-tune
+  receipt handling (finding 3), and startup reconciliation (finding
+  5). Runner terminal-event coverage was added in 0.15.0.
+- Total backend test count: **83** (was 62).
+
 ## 0.15.0 — 2026-04-23
 
 ### Fixed
