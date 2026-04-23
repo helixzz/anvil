@@ -26,6 +26,7 @@ class DeviceOut(BaseModel):
     first_seen: datetime
     last_seen: datetime
     metadata_json: dict[str, Any] = Field(default_factory=dict)
+    physical_location: dict[str, Any] | None = None
 
     class Config:
         from_attributes = True

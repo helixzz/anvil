@@ -7,6 +7,29 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.2.0 — 2026-04-23
+
+### Added
+- **Physical slot / tray mapping per device.** Every device now has
+  an operator-editable `physical_location` field holding
+  `{chassis, bay, tray, port, notes}`. A new
+  `PhysicalLocationCard` on the Device Detail page lets operators
+  annotate where each drive lives in the rack and surfaces the
+  auto-detected PCIe BDF address (stable across reboots) so a drive
+  can be physically identified without opening the chassis.
+- New endpoint `PATCH /api/devices/{id}/location` (operator+admin)
+  accepts the five fields; empty strings are treated as "unset" and
+  an empty payload clears the location. Persisted via new column
+  `devices.physical_location` (nullable JSONB, migration
+  `20260423_0006_physical_location`).
+- `DeviceOut` schema + API client gain `physical_location`.
+- 5 new tests covering set / clear / 404 / empty-string handling /
+  round-trip read (96 total).
+
+### Migrations
+- **`20260423_0006_physical_location`** — adds nullable JSONB
+  column `devices.physical_location`.
+
 ## 1.1.0 — 2026-04-23
 
 ### Added

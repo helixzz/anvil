@@ -5,6 +5,7 @@ from typing import Any
 
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -256,3 +257,26 @@ async def get_snapshots(
             }
         )
     return out
+
+
+class PhysicalLocation(BaseModel):
+    chassis: str | None = None
+    bay: str | None = None
+    tray: str | None = None
+    port: str | None = None
+    notes: str | None = None
+
+
+@router.patch("/{device_id}/location", dependencies=[Depends(require_operator)])
+async def set_device_location(
+    device_id: str,
+    body: PhysicalLocation,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    device = await session.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    payload = {k: v for k, v in body.model_dump().items() if v is not None and v != ""}
+    device.physical_location = payload or None
+    await session.commit()
+    return {"device_id": device_id, "physical_location": device.physical_location}

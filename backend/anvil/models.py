@@ -67,6 +67,7 @@ class Device(Base):
     exclusion_reason: Mapped[str | None] = mapped_column(String(256))
     current_device_path: Mapped[str | None] = mapped_column(String(256))
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    physical_location: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     first_seen: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
     last_seen: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
 

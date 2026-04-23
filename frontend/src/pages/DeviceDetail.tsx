@@ -8,6 +8,7 @@ import ReactECharts from "echarts-for-react";
 import { api } from "@/api";
 import { humanBps, humanIops } from "@/lib/format";
 import { PcieLinkCard, type PcieLinkData } from "@/components/PcieLinkCard";
+import { PhysicalLocationCard } from "@/components/PhysicalLocationCard";
 
 export default function DeviceDetail() {
   const { t } = useTranslation();
@@ -151,6 +152,8 @@ export default function DeviceDetail() {
       </div>
 
       {h.pcie && <PcieLinkCard pcie={h.pcie as PcieLinkData} />}
+
+      <PhysicalLocationCard deviceId={id} />
 
       <div className="card">
         <h3>{t("devices.history")}</h3>

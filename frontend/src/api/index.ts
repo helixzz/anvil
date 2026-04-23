@@ -61,6 +61,13 @@ export interface Device {
   first_seen: string;
   last_seen: string;
   metadata_json: Record<string, unknown>;
+  physical_location?: {
+    chassis?: string;
+    bay?: string;
+    tray?: string;
+    port?: string;
+    notes?: string;
+  } | null;
 }
 
 export interface ProfilePhase {
@@ -533,7 +540,16 @@ export const api = {
       method: "DELETE",
     }),
   listDevices: () => jsonFetch<Device[]>("/api/devices"),
+  getDevice: (id: string) => jsonFetch<Device>(`/api/devices/${encodeURIComponent(id)}`),
   rescanDevices: () => jsonFetch<Device[]>("/api/devices/rescan", { method: "POST" }),
+  setDeviceLocation: (
+    id: string,
+    body: { chassis?: string | null; bay?: string | null; tray?: string | null; port?: string | null; notes?: string | null },
+  ) =>
+    jsonFetch<{ device_id: string; physical_location: Record<string, string> | null }>(
+      `/api/devices/${encodeURIComponent(id)}/location`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
   getDeviceHistory: (id: string) =>
     jsonFetch<DeviceHistory>(`/api/devices/${encodeURIComponent(id)}/history`),
   listRuns: () => jsonFetch<RunSummary[]>("/api/runs"),
