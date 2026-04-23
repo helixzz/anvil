@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from anvil.api import require_bearer
-from anvil.auth import require_operator
+from anvil.auth import Principal, require_operator, resolve_principal
 from anvil.db import get_session
 from anvil.models import Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.orchestrator import audit, get_queue
@@ -492,12 +492,16 @@ async def export_run_json(
 
 @router.get("/{run_id}/share")
 async def get_run_share(
-    run_id: str, session: AsyncSession = Depends(get_session)
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(resolve_principal),
 ) -> dict:
     run = await session.get(Run, run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-    return {"run_id": run.id, "share_slug": run.share_slug}
+    if principal.has_role("operator"):
+        return {"run_id": run.id, "share_slug": run.share_slug, "is_shared": run.share_slug is not None}
+    return {"run_id": run.id, "is_shared": run.share_slug is not None}
 
 
 @router.post("/{run_id}/share", dependencies=[Depends(require_operator)])

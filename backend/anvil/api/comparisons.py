@@ -31,18 +31,20 @@ class ComparisonOut(BaseModel):
     description: str | None
     run_ids: list[str]
     share_slug: str | None
+    is_shared: bool
     created_by: str | None
     created_at: str
     updated_at: str
 
 
-def _to_out(row: SavedComparison) -> ComparisonOut:
+def _to_out(row: SavedComparison, include_slug: bool = True) -> ComparisonOut:
     return ComparisonOut(
         id=row.id,
         name=row.name,
         description=row.description,
         run_ids=list(row.run_ids or []),
-        share_slug=row.share_slug,
+        share_slug=row.share_slug if include_slug else None,
+        is_shared=row.share_slug is not None,
         created_by=row.created_by,
         created_at=row.created_at.isoformat(),
         updated_at=row.updated_at.isoformat(),
@@ -52,13 +54,15 @@ def _to_out(row: SavedComparison) -> ComparisonOut:
 @router.get("", response_model=list[ComparisonOut])
 async def list_comparisons(
     session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(resolve_principal),
 ) -> list[ComparisonOut]:
     rows = (
         await session.execute(
             select(SavedComparison).order_by(SavedComparison.updated_at.desc())
         )
     ).scalars().all()
-    return [_to_out(r) for r in rows]
+    include_slug = principal.has_role("operator")
+    return [_to_out(r, include_slug=include_slug) for r in rows]
 
 
 @router.post(
@@ -84,12 +88,14 @@ async def create_comparison(
 
 @router.get("/{comp_id}", response_model=ComparisonOut)
 async def get_comparison(
-    comp_id: str, session: AsyncSession = Depends(get_session)
+    comp_id: str,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(resolve_principal),
 ) -> ComparisonOut:
     row = await session.get(SavedComparison, comp_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return _to_out(row)
+    return _to_out(row, include_slug=principal.has_role("operator"))
 
 
 @router.put(

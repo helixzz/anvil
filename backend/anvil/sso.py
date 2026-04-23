@@ -135,15 +135,78 @@ async def load_sso_config(session: AsyncSession) -> SsoConfig:
     return SsoConfig.from_dict(row.value)
 
 
-async def save_sso_config(session: AsyncSession, config: SsoConfig) -> None:
+async def load_sso_config_with_version(
+    session: AsyncSession,
+) -> tuple[SsoConfig, str | None]:
+    """Return (config, version) where version is an ISO8601 updated_at.
+
+    Admin clients should pass this version back on PUT to detect
+    concurrent edits. A None version means the row does not yet exist.
+    """
+    result = await session.execute(select(AppSetting).where(AppSetting.key == SSO_CONFIG_KEY))
+    row = result.scalar_one_or_none()
+    if row is None:
+        return (SsoConfig(), None)
+    return (SsoConfig.from_dict(row.value), row.updated_at.isoformat())
+
+
+class SsoConfigVersionConflict(RuntimeError):
+    """Raised when a PUT attempts to overwrite a newer app_settings row."""
+
+
+class _Unset:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "<UNSET>"
+
+
+_UNSET = _Unset()
+
+
+async def save_sso_config(
+    session: AsyncSession,
+    config: SsoConfig,
+    expected_version: str | None | _Unset = _UNSET,
+) -> str:
+    """Persist the SSO config; returns the new version (updated_at ISO).
+
+    Semantics of `expected_version`:
+      - omitted (default `_UNSET`): force-save, skip the check. Used
+        only by internal tooling / migrations.
+      - `None`: the caller expects no row to exist yet (first save);
+        if a row DOES exist, a `SsoConfigVersionConflict` is raised.
+      - string: the caller expects `row.updated_at.isoformat()` to
+        match; any mismatch (including a freshly-absent row) raises.
+    """
     result = await session.execute(select(AppSetting).where(AppSetting.key == SSO_CONFIG_KEY))
     row = result.scalar_one_or_none()
     now = datetime.now(UTC)
     if row is None:
-        session.add(AppSetting(key=SSO_CONFIG_KEY, value=config.as_dict(), updated_at=now))
-    else:
-        row.value = config.as_dict()
-        row.updated_at = now
+        if expected_version is not _UNSET and expected_version is not None:
+            raise SsoConfigVersionConflict(
+                f"SSO config does not exist but caller expected version {expected_version}"
+            )
+        new_row = AppSetting(key=SSO_CONFIG_KEY, value=config.as_dict(), updated_at=now)
+        session.add(new_row)
+        await session.flush()
+        await session.refresh(new_row)
+        return new_row.updated_at.isoformat()
+    current = row.updated_at.isoformat()
+    if expected_version is not _UNSET and expected_version != current:
+        raise SsoConfigVersionConflict(
+            f"version mismatch: expected {expected_version!r}, have {current!r}"
+        )
+    row.value = config.as_dict()
+    row.updated_at = now
+    await session.flush()
+    await session.refresh(row)
+    return row.updated_at.isoformat()
 
 
 async def provision_sso_user(

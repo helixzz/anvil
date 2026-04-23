@@ -118,13 +118,28 @@ app = FastAPI(
     lifespan=_lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_settings().cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_origins = get_settings().cors_origins
+if "*" in _cors_origins:
+    _cors_allow_credentials = False
+    get_logger("anvil").warning(
+        "cors_wildcard_with_credentials_disabled",
+        detail=(
+            "cors_origins contains '*'; allow_credentials forced to false because "
+            "browsers refuse to send cookies to a wildcarded origin. List explicit "
+            "origins if you need credentialed cross-origin calls."
+        ),
+    )
+else:
+    _cors_allow_credentials = bool(_cors_origins)
+
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=_cors_allow_credentials,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(devices_router, prefix="/api")

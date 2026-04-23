@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path("/var/lib/anvil")
     host: str = "0.0.0.0"
     port: int = 8080
-    cors_origins: list[str] = ["*"]
+    cors_origins: list[str] = Field(default_factory=list)
     log_level: str = "info"
     simulation_mode: bool = False
 

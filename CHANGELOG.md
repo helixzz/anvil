@@ -8,6 +8,43 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.17.0 — 2026-04-23
+
+### Security
+- **CORS default tightened.** `cors_origins` previously defaulted to
+  `["*"]` with `allow_credentials=True`, a combination browsers
+  silently refuse to honor for credentialed XHR; the default is now
+  an empty list so the CORS middleware is not installed at all
+  unless an operator explicitly lists the origins they need. If an
+  operator still sets `["*"]`, `allow_credentials` is forced to
+  `False` and a warning log is emitted. Allowed methods/headers were
+  also narrowed from `["*"]` to `["GET","POST","PUT","PATCH",
+  "DELETE","OPTIONS"]` and `["Authorization","Content-Type"]`.
+- **Share-slug disclosure to viewers is fixed.**
+  `GET /api/runs/{id}/share` previously returned the active slug to
+  any authenticated user, so a viewer could enumerate and
+  redistribute every active public URL. The endpoint now returns
+  `{"is_shared": bool}` to viewers and the full
+  `{"share_slug", "is_shared"}` only to operator+admin. Saved
+  comparisons list/get apply the same filter: `share_slug` in the
+  response body is masked to `null` for viewers; the new
+  `is_shared` boolean is always present.
+- **SSO config writes are now optimistically versioned.**
+  `PUT /api/auth/sso/config` accepts an `expected_version` field;
+  `GET` returns `version` (ISO timestamp of the current row). If an
+  admin PUTs with a stale `expected_version`, the endpoint returns
+  409 Conflict instead of silently clobbering a concurrent edit. A
+  sentinel-based contract in `save_sso_config()` distinguishes
+  "omitted → force save (tooling only)" from "None → expects no row
+  yet" from "string → expects this exact version". The Sso admin
+  page automatically forwards the loaded `version` as
+  `expected_version` on save.
+
+### Tests
+- 3 new tests (89 total) covering: viewer cannot see share_slug in
+  `/api/runs/{id}/share`; SSO config 409 on stale version; SSO
+  config first-write without version is accepted.
+
 ## 0.16.0 — 2026-04-23
 
 ### Added

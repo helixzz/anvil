@@ -23,7 +23,9 @@ from anvil.models import AuditLog, User, UserRole
 from anvil.sso import (
     GroupRoleMapping,
     SsoConfig,
+    SsoConfigVersionConflict,
     load_sso_config,
+    load_sso_config_with_version,
     provision_sso_user,
     save_sso_config,
 )
@@ -233,6 +235,7 @@ class SsoConfigRequest(BaseModel):
     groups_attribute: str = "memberOf"
     default_role: str = UserRole.VIEWER.value
     mappings: list[MappingEntry] = Field(default_factory=list)
+    expected_version: str | None = None
 
 
 class SsoAssertionRequest(BaseModel):
@@ -255,8 +258,10 @@ async def get_sso_config(
     principal: Principal = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    config = await load_sso_config(session)
-    return config.as_dict()
+    config, version = await load_sso_config_with_version(session)
+    out = config.as_dict()
+    out["version"] = version
+    return out
 
 
 @router.put("/auth/sso/config")
@@ -289,7 +294,15 @@ async def put_sso_config(
         default_role=body.default_role,
         mappings=[GroupRoleMapping(group=m.group, role=m.role) for m in body.mappings],
     )
-    await save_sso_config(session, config)
+    try:
+        new_version = await save_sso_config(
+            session, config, expected_version=body.expected_version
+        )
+    except SsoConfigVersionConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"SSO config changed by another admin; reload before editing. ({exc})",
+        ) from exc
     _audit(
         session,
         actor=principal.username,
@@ -298,7 +311,9 @@ async def put_sso_config(
         details=config.as_dict(),
     )
     await session.commit()
-    return config.as_dict()
+    out = config.as_dict()
+    out["version"] = new_version
+    return out
 
 
 @router.post("/auth/sso/assertion")

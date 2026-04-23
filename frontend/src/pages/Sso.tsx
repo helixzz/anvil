@@ -30,7 +30,8 @@ export default function Sso() {
   }, [q.data]);
 
   const saveMut = useMutation({
-    mutationFn: (c: SsoConfig) => api.saveSsoConfig(c),
+    mutationFn: (c: SsoConfig) =>
+      api.saveSsoConfig({ ...c, expected_version: c.version ?? null }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sso-config"] }),
   });
 

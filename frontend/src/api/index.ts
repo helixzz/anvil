@@ -488,6 +488,8 @@ export interface SsoConfig {
   groups_attribute: string;
   default_role: string;
   mappings: { group: string; role: string }[];
+  version?: string | null;
+  expected_version?: string | null;
 }
 
 export const api = {
