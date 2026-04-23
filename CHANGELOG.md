@@ -7,6 +7,43 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.2.2 — 2026-04-23
+
+### Fixed
+- **One-click environment auto-tune was silently no-op on every
+  live deployment since v0.14.0.** The security hardening that
+  introduced `_path_is_tunable()` as an allowlist used
+  `fnmatch(path, glob)` against bare globs like
+  `/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor`. But the
+  runner writes every sysfs path through `_host_path()`, which
+  prepends `/proc/1/root/` to reach the host namespace via
+  `pid=host`, so real write paths look like
+  `/proc/1/root/sys/devices/...`. The allowlist rejected every
+  prefixed path with `PermissionError`, the transactional apply
+  reverted immediately, the receipt came back with `reverted: true`
+  and all `ok: false` — and the host CPU governor / NVMe scheduler
+  / PCIe ASPM stayed exactly where they were.
+  Fix: strip the `/proc/1/root` prefix (only when present as a full
+  path segment, never as a substring-prefix of a longer directory
+  name) before the fnmatch check, then re-validate that the
+  resulting path still does not contain `..`. The fix preserves the
+  security guarantee (can't smuggle writes to `/etc/passwd` or
+  `/proc/sysrq-trigger`) while allowing the legitimate host-prefixed
+  paths the runner actually uses.
+- 5 new regression tests cover: prefixed cpu / nvme / pcie writes
+  all pass; prefixed traversal (`/proc/1/root/../../../etc/shadow`)
+  refuses; and a bogus prefix like `/proc/1/rootsys/...` correctly
+  falls through to the bare-path branch (not treated as prefixed).
+  105 total tests, 5 new.
+
+### Notes
+- **This affects every production Anvil deployment running 0.14.0
+  through 1.2.1.** Operators who "applied auto-tune" on those
+  releases should verify their host tunables are actually at the
+  expected values — they almost certainly are not. After upgrading
+  to 1.2.2, click "Apply" again and the receipt will show real
+  `before → after` transitions.
+
 ## 1.2.1 — 2026-04-23
 
 ### Fixed

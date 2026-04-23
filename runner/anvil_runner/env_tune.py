@@ -142,11 +142,29 @@ def _path_is_tunable(path: str) -> bool:
     """Whitelist: a path may be written only if it matches one of the
     TUNABLE globs. Prevents a malicious revert payload from pointing at
     arbitrary sysfs/procfs files and smuggling in a privileged write.
+
+    The runner writes through `/proc/1/root/` (host namespace) via
+    `_host_path()`, so a real write path looks like
+    `/proc/1/root/sys/devices/...` while the TUNABLE globs are declared
+    bare (`/sys/devices/...`). Before matching, strip the `/proc/1/root`
+    prefix so both the bare and prefixed forms are recognised.
+
+    Any `..` in the path (before or after prefix-stripping) is an
+    outright reject — no traversal tricks, no sneaking out of /sys.
     """
     import fnmatch
     if not path or ".." in path:
         return False
-    return any(fnmatch.fnmatchcase(path, t.path_glob) for t in TUNABLES)
+    prefix = "/proc/1/root"
+    if path.startswith(prefix + "/"):
+        candidate = path[len(prefix):]
+    elif path == prefix:
+        return False
+    else:
+        candidate = path
+    if ".." in candidate:
+        return False
+    return any(fnmatch.fnmatchcase(candidate, t.path_glob) for t in TUNABLES)
 
 
 def _write_sysfs(path: str, value: str) -> None:
