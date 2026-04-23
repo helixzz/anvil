@@ -281,6 +281,15 @@ export default function Compare() {
         </div>
       )}
 
+      {compareQ.isError && (
+        <div className="card" style={{ background: "#3b1820", border: "1px solid #7f1d1d" }}>
+          <h3>Could not load comparison</h3>
+          <div className="dim" style={{ fontSize: 12 }}>
+            {String((compareQ.error as Error)?.message ?? compareQ.error)}
+          </div>
+        </div>
+      )}
+
       {compareQ.data && chartOption && (
         <div className="card">
           <ReactECharts

@@ -7,6 +7,49 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.2.1 — 2026-04-23
+
+### Fixed
+- **Cross-model comparison page was always blank.** The backend
+  routes `GET /api/models/compare` and
+  `GET /api/models/compare/common-phases` were declared AFTER
+  `GET /api/models/{slug}` in `backend/anvil/api/models.py`, so
+  FastAPI matched `/compare` against the slug route and returned
+  `404 "Model not found"` instead of running the comparison query.
+  The frontend's compareQ silently received the 404, the chart
+  gate (`compareQ.data && chartOption`) stayed falsy, and the page
+  rendered nothing after model + metric selection. Relocated both
+  `/compare*` routes to be declared BEFORE `/{slug}` with an inline
+  NOTE docstring warning future refactors not to move them back.
+  Regression covered by 4 new tests (99 total): common-phases
+  intersection, compare samples, and two explicit guards asserting
+  that the static routes return `422` (missing required query
+  param) rather than `404` when called without arguments.
+- **Compare page now surfaces fetch errors.** When the compareQ
+  fails, the page shows a red error card with the response message
+  instead of rendering nothing. Makes bugs like the above
+  immediately diagnosable in the UI.
+
+### i18n
+- **Full sweep of missing translation keys across the site.** 60
+  previously undefined keys that UI code was requesting (and
+  falling back to the raw key string) are now provided in both
+  English and Chinese:
+  - `dashboard.*` (17 keys) — overview KPI cards, leaderboards,
+    alarms section, PCIe-degraded card, recent runs, activity
+    chart axis labels.
+  - `pcie.*` (12 keys) — PcieLinkCard headers, capability vs.
+    runtime state column labels, degraded/optimal badges, speed
+    and width warnings, BDF address label.
+  - `compare.*` (14 keys) — Cross-model page title, subtitle, all
+    picker labels (models / phase / metric), summary table
+    headers, and the mean/best/sample legend labels.
+  - `admin.*` (17 keys) — Users page title, subtitle, form fields,
+    table headers, yes/no, delete-confirm dialog with
+    `{{username}}` interpolation.
+  - Total defined keys in both locales: **307**. `en` and `zh` are
+    now perfectly in sync (zero drift, verified by an audit script).
+
 ## 1.2.0 — 2026-04-23
 
 ### Added
