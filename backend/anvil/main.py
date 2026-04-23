@@ -73,6 +73,19 @@ async def _bootstrap_admin() -> None:
         if admin_count > 0:
             return
         bootstrap_pw = settings.bearer_token[:16]
+        existing = (
+            await session.execute(select(User).where(User.username == "admin"))
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.role = UserRole.ADMIN.value
+            existing.is_active = True
+            existing.password_hash = hash_password(bootstrap_pw)
+            log.warning(
+                "bootstrap_admin_promoted",
+                username="admin",
+                password_source="first 16 chars of ANVIL_BEARER_TOKEN",
+            )
+            return
         user = User(
             id=str(ulid.ULID()),
             username="admin",

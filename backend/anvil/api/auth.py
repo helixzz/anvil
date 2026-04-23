@@ -236,14 +236,13 @@ class SsoConfigRequest(BaseModel):
 
 
 class SsoAssertionRequest(BaseModel):
-    """Development / test-only: accept already-validated assertion attributes.
+    """Inputs for the admin-only SSO provisioning smoke test.
 
-    In a production SAML flow the ACS endpoint receives an XML
-    AuthnResponse, validates its signature + NotOnOrAfter window + issuer,
-    and only then calls provision_sso_user with the extracted attributes.
-    This endpoint skips all of that and trusts the caller — it exists so
-    admins can exercise the group→role mapping + user-provisioning path
-    end-to-end before a full SAML library integration lands.
+    The sibling endpoint `/auth/sso/assertion` MUST remain admin-gated
+    because these attributes are caller-supplied and would otherwise be
+    a straight auth bypass. A real SAML ACS would populate these fields
+    only after validating the XML AuthnResponse signature, issuer,
+    NotOnOrAfter window, and replay nonce.
     """
 
     username: str = Field(min_length=1)
@@ -305,17 +304,22 @@ async def put_sso_config(
 @router.post("/auth/sso/assertion")
 async def sso_assertion(
     body: SsoAssertionRequest,
+    principal: Principal = Depends(require_admin),
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(get_session),
 ) -> LoginResponse:
-    """Consume a (test-only) pre-validated SSO assertion and issue a JWT.
+    """Admin-only SSO provisioning smoke test.
 
-    Guarded by the SSO config's `enabled` flag — if SSO isn't turned on
-    this endpoint rejects with 403 so a broken deploy can't accidentally
-    provision arbitrary users. When a real SAML library is wired up this
-    handler is where the assertion signature + notBefore/notOnOrAfter
-    checks get added; the provisioning + JWT issuance below stays
-    identical.
+    This endpoint trusts its inputs, so it MUST remain admin-gated. It
+    exists so an administrator can exercise the group→role mapping and
+    user-provisioning path end-to-end from the admin UI while the real
+    SAML ACS is not yet wired up.
+
+    A real production login flow must never use this handler; a proper
+    ACS endpoint has to validate signature + NotOnOrAfter window +
+    issuer + audience + replay BEFORE calling `provision_sso_user`.
+    Until that exists, SSO-only logins are not possible, and this
+    endpoint is a dev/admin utility, not a login primitive.
     """
     config = await load_sso_config(session)
     if not config.enabled:
@@ -334,10 +338,10 @@ async def sso_assertion(
     token = create_jwt(user, secret=settings.bearer_token)
     _audit(
         session,
-        actor=user.username,
-        action="sso_login",
+        actor=principal.username,
+        action="sso_assertion_test",
         target=user.id,
-        details={"groups": body.groups, "assigned_role": user.role},
+        details={"groups": body.groups, "assigned_role": user.role, "for_user": user.username},
     )
     await session.commit()
     return LoginResponse(

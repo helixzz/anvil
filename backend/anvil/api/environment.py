@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
+import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from anvil.api import require_bearer
-from anvil.auth import require_admin
+from anvil.auth import Principal, require_admin, resolve_principal
 from anvil.config import get_settings
+from anvil.db import get_session
+from anvil.models import TuneReceipt
 from anvil.orchestrator import audit as audit_write
 from anvil.runner import get_runner_client
 
@@ -19,7 +23,7 @@ class TuneRequest(BaseModel):
 
 
 class TuneRevertRequest(BaseModel):
-    results: list[dict[str, Any]]
+    receipt_id: str
 
 
 @router.get("")
@@ -72,13 +76,18 @@ async def tune_preview(keys: str | None = None) -> dict[str, Any]:
 
 
 @router.post("/tune/apply", dependencies=[Depends(require_admin)])
-async def tune_apply(body: TuneRequest) -> dict[str, Any]:
-    """Apply the full tuning set (or a named subset). Records an audit-log row.
+async def tune_apply(
+    body: TuneRequest,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(resolve_principal),
+) -> dict[str, Any]:
+    """Apply the full tuning set (or a named subset). Persists an
+    opaque receipt server-side; pass the receipt_id to /tune/revert for
+    a safe undo.
 
-    Admin-only because this writes to host sysfs and changes benchmark
-    reproducibility guarantees. The response contains every path touched
-    with before / after / ok so the caller can later POST the same
-    results back to /tune/revert for a clean undo.
+    The server never accepts a caller-supplied revert payload. Revert
+    reads the stored receipt by ID, so a malicious client cannot
+    redirect the privileged sysfs write to arbitrary paths.
     """
     settings = get_settings()
     client = get_runner_client(settings.runner_socket)
@@ -89,31 +98,61 @@ async def tune_apply(body: TuneRequest) -> dict[str, Any]:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Runner unreachable: {exc}",
         ) from exc
+    receipt_id = str(ulid.ULID())
+    session.add(TuneReceipt(
+        id=receipt_id,
+        results=receipt.get("results") or [],
+        reverted=False,
+        created_by=principal.user_id,
+    ))
     await audit_write(
-        actor="tune_apply",
+        actor=principal.username,
         action="env_tune_apply",
-        target=None,
-        details={"keys": body.keys, "receipt": receipt},
+        target=receipt_id,
+        details={"keys": body.keys, "entries": len(receipt.get("results") or [])},
     )
-    return receipt
+    await session.commit()
+    return {"receipt_id": receipt_id, **receipt}
 
 
 @router.post("/tune/revert", dependencies=[Depends(require_admin)])
-async def tune_revert(body: TuneRevertRequest) -> dict[str, Any]:
-    """Revert a prior apply. Pass the `results` list from the apply response."""
+async def tune_revert(
+    body: TuneRevertRequest,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(resolve_principal),
+) -> dict[str, Any]:
+    """Revert a prior apply by receipt_id.
+
+    Loads the apply-time results from the database, not from the
+    request body, so a malicious client cannot substitute an arbitrary
+    (path, value) pair to trigger an unauthorized privileged write.
+    The runner additionally enforces a sysfs-glob allowlist as
+    defense-in-depth.
+    """
+    stored = await session.get(TuneReceipt, body.receipt_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found"
+        )
+    if stored.reverted:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="receipt already reverted"
+        )
     settings = get_settings()
     client = get_runner_client(settings.runner_socket)
     try:
-        receipt = await client.tune_revert(body.results)
+        receipt = await client.tune_revert(list(stored.results or []))
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Runner unreachable: {exc}",
         ) from exc
+    stored.reverted = True
     await audit_write(
-        actor="tune_revert",
+        actor=principal.username,
         action="env_tune_revert",
-        target=None,
-        details={"receipt": receipt},
+        target=body.receipt_id,
+        details={"entries": len(stored.results or [])},
     )
-    return receipt
+    await session.commit()
+    return {"receipt_id": body.receipt_id, **receipt}

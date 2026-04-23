@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
@@ -11,6 +13,31 @@ from anvil.models import Device, Run, RunMetric, SavedComparison
 from anvil.reports import render_run_html
 
 router = APIRouter(prefix="/r", tags=["public"])
+
+
+def _public_report_headers() -> dict[str, str]:
+    """Security headers for every public report response.
+
+    The HTML reports are self-contained (no external scripts, no inline
+    script tags, no remote images) so a strict CSP costs us nothing and
+    hard-stops any XSS vector if a future refactor introduces one. Also
+    noindex so public shares don't leak into search engines.
+    """
+    return {
+        "Cache-Control": "public, max-age=300",
+        "X-Robots-Tag": "noindex",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "Content-Security-Policy": (
+            "default-src 'none'; "
+            "style-src 'unsafe-inline'; "
+            "img-src data:; "
+            "font-src data:; "
+            "frame-ancestors 'none'; "
+            "base-uri 'none'; "
+            "form-action 'none'"
+        ),
+    }
 
 
 async def _load_run_for_export(
@@ -88,7 +115,7 @@ async def public_run_report(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
     run_dict, phases, timeseries, device = await _load_run_for_export(run.id, session)
-    html = render_run_html(
+    html_out = render_run_html(
         run=run_dict,
         phases=phases,
         timeseries=timeseries,
@@ -96,11 +123,8 @@ async def public_run_report(
         redact=True,
     )
     return HTMLResponse(
-        content=html,
-        headers={
-            "Cache-Control": "public, max-age=300",
-            "X-Robots-Tag": "noindex",
-        },
+        content=html_out,
+        headers=_public_report_headers(),
     )
 
 
@@ -134,18 +158,17 @@ async def public_comparison_report(
             f'{section}</section>'
         )
     body = "\n".join(sections) or "<p>No runs in this comparison.</p>"
-    html = f"""<!doctype html><html lang="en"><head>
-<meta charset="utf-8" /><title>Anvil Comparison — {comp.name}</title>
+    name_safe = html.escape(comp.name or "", quote=True)
+    desc_safe = html.escape(comp.description or "", quote=True)
+    html_out = f"""<!doctype html><html lang="en"><head>
+<meta charset="utf-8" /><title>Anvil Comparison — {name_safe}</title>
 <style>body{{background:#0b1220;color:#e2e8f0;margin:0;padding:32px;font-family:-apple-system,sans-serif}}
 h1{{font-size:24px;margin:0 0 8px}}</style></head><body>
-<h1>Comparison: {comp.name}</h1>
-<p style="color:#94a3b8">{comp.description or ''}</p>
+<h1>Comparison: {name_safe}</h1>
+<p style="color:#94a3b8">{desc_safe}</p>
 {body}
 </body></html>"""
     return HTMLResponse(
-        content=html,
-        headers={
-            "Cache-Control": "public, max-age=300",
-            "X-Robots-Tag": "noindex",
-        },
+        content=html_out,
+        headers=_public_report_headers(),
     )

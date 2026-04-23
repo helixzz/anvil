@@ -8,6 +8,74 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.14.0 — 2026-04-23
+
+### Security
+- **SSO assertion endpoint is now admin-gated.** Previously
+  `POST /api/auth/sso/assertion` trusted caller-supplied `username` and
+  `groups` behind only the SSO-enabled flag, which meant once SSO was
+  turned on any caller on the LAN could mint a JWT for any username and
+  escalate to admin via group mapping. The endpoint is now explicitly
+  an admin-only provisioning smoke test; it is not a login path. A
+  real ACS that validates signature, issuer, NotOnOrAfter, audience,
+  and replay must still be built before SSO can be a production login
+  flow. Docstrings on the handler and on `SsoAssertionRequest`
+  document the trust boundary so the `require_admin` gate does not get
+  removed by a future refactor.
+- **env-tune revert no longer trusts client-supplied paths.** Apply
+  now persists the receipt server-side in the new `tune_receipts`
+  table and returns a `receipt_id`; revert takes only `{receipt_id}`
+  and loads the stored `results` list from the database, so a
+  malicious admin request cannot redirect the privileged sysfs write
+  to arbitrary paths. The runner additionally enforces an explicit
+  sysfs-glob allowlist inside `_write_sysfs()` — any write that falls
+  outside the known tunable globs is rejected with `PermissionError`
+  (defense-in-depth; previously the allowlist was only checked in
+  `apply()`). Attempts to use `..` traversal or to point at
+  `/etc/passwd` / `/proc/sysrq-trigger` are refused.
+- **Stored XSS in HTML reports is fixed.** Every interpolated string
+  in `anvil.reports.render_run_html()` (profile name, device model,
+  firmware, vendor, PCIe metadata, phase name/pattern, SVG legends and
+  axes, comparison name/description) now flows through
+  `html.escape(..., quote=True)` via the new `_e()` helper. A hostile
+  device model or comparison name cannot execute script on the public
+  `/r/runs/{slug}` or `/r/compare/{slug}` pages any more. Four
+  regression tests cover the escape paths for profile, device, phase,
+  and the redacted code path.
+- **Strict Content-Security-Policy on every report response.**
+  Public share endpoints and the authenticated HTML export now set
+  `Content-Security-Policy: default-src 'none'; style-src
+  'unsafe-inline'; img-src data:; font-src data:; frame-ancestors
+  'none'; base-uri 'none'; form-action 'none'`, plus
+  `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`
+  on public responses. Because the exports are self-contained (no
+  external scripts, images, fonts, or forms) a strict CSP costs
+  nothing and hard-stops any future XSS vector if an escape is missed.
+
+### Changed
+- `_bootstrap_admin()` is now idempotent against a pre-existing `admin`
+  user. If a disabled or non-admin user named `admin` already exists,
+  startup promotes that row (active=true, role=admin, password reset
+  to the bearer-token bootstrap value) instead of blindly inserting
+  and hitting the unique-constraint on `users.username`.
+- Frontend vite build now splits vendor bundles
+  (echarts / react / query / i18n / router) so the entrypoint chunk is
+  under 110 KB gzipped instead of 465 KB. ECharts remains its own
+  ~350 KB gzipped lazy-loadable chunk. Chunk-size warning threshold
+  raised to 1200 KB so a regression still fires.
+
+### API
+- `POST /api/environment/tune/apply` response now includes
+  `receipt_id` (a ULID). Old callers that read `.results` still work.
+- `POST /api/environment/tune/revert` now accepts `{receipt_id}`
+  instead of `{results}`. A second revert of the same receipt
+  returns 409 Conflict. A missing receipt returns 404.
+
+### Migrations
+- **`20260423_0005_tune_receipts`** — new `tune_receipts` table
+  (`id`, `results` JSONB, `reverted`, `created_at`, `created_by` FK
+  to users with ON DELETE SET NULL).
+
 ## 0.13.0 — 2026-04-23
 
 ### Added

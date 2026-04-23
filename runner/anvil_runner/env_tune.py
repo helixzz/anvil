@@ -138,7 +138,20 @@ def _read_sysfs(path: str) -> str | None:
         return None
 
 
+def _path_is_tunable(path: str) -> bool:
+    """Whitelist: a path may be written only if it matches one of the
+    TUNABLE globs. Prevents a malicious revert payload from pointing at
+    arbitrary sysfs/procfs files and smuggling in a privileged write.
+    """
+    import fnmatch
+    if not path or ".." in path:
+        return False
+    return any(fnmatch.fnmatchcase(path, t.path_glob) for t in TUNABLES)
+
+
 def _write_sysfs(path: str, value: str) -> None:
+    if not _path_is_tunable(path):
+        raise PermissionError(f"refusing to write unallowed path: {path}")
     with open(path, "w") as f:
         f.write(value)
 

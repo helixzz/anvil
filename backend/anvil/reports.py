@@ -20,11 +20,28 @@ repository, attached to an email, or archived long-term.
 """
 from __future__ import annotations
 
+import html
 import json
 from datetime import UTC, datetime
 from typing import Any
 
 from anvil import __version__
+
+
+def _e(v: Any) -> str:
+    """HTML-escape any value before interpolating into a rendered report.
+
+    Report HTML is served both via authenticated export endpoints and
+    via unauthenticated public share URLs (/r/runs/{slug}), so every
+    interpolated string must be treated as untrusted: device model /
+    firmware / vendor come from block-device metadata, comparison
+    name / description are user input, and profile_name is user-chosen.
+    A single unescaped interpolation here is a stored-XSS primitive on
+    a public page.
+    """
+    if v is None:
+        return "—"
+    return html.escape(str(v), quote=True)
 
 
 def _fmt_ns(ns: float | int | None) -> str:
@@ -69,18 +86,18 @@ def _render_phase_row(phase: dict[str, Any]) -> str:
 
     return (
         "<tr>"
-        + td(str(phase.get("phase_order", "")))
-        + td(str(phase.get("phase_name", "")), "name")
-        + td(str(phase.get("pattern", "")))
-        + td(_fmt_bytes(phase.get("block_size")))
-        + td(str(phase.get("iodepth", "")))
-        + td(str(phase.get("numjobs", "")))
-        + td(_fmt_iops(phase.get("read_iops")))
-        + td(_fmt_bytes(phase.get("read_bw_bytes")) + "/s")
-        + td(_fmt_iops(phase.get("write_iops")))
-        + td(_fmt_bytes(phase.get("write_bw_bytes")) + "/s")
-        + td(_fmt_ns(phase.get("read_clat_mean_ns") or phase.get("write_clat_mean_ns")))
-        + td(_fmt_ns(phase.get("read_clat_p99_ns") or phase.get("write_clat_p99_ns")))
+        + td(_e(phase.get("phase_order", "")))
+        + td(_e(phase.get("phase_name", "")), "name")
+        + td(_e(phase.get("pattern", "")))
+        + td(_e(_fmt_bytes(phase.get("block_size"))))
+        + td(_e(phase.get("iodepth", "")))
+        + td(_e(phase.get("numjobs", "")))
+        + td(_e(_fmt_iops(phase.get("read_iops"))))
+        + td(_e(_fmt_bytes(phase.get("read_bw_bytes")) + "/s"))
+        + td(_e(_fmt_iops(phase.get("write_iops"))))
+        + td(_e(_fmt_bytes(phase.get("write_bw_bytes")) + "/s"))
+        + td(_e(_fmt_ns(phase.get("read_clat_mean_ns") or phase.get("write_clat_mean_ns"))))
+        + td(_e(_fmt_ns(phase.get("read_clat_p99_ns") or phase.get("write_clat_p99_ns"))))
         + "</tr>"
     )
 
@@ -119,7 +136,7 @@ def _timeseries_svg(
     all_y = [y for arr in per_metric.values() for _, y in arr]
     if not all_x or not all_y:
         return (
-            f'<div class="chart-empty"><h4>{title}</h4>'
+            f'<div class="chart-empty"><h4>{_e(title)}</h4>'
             f'<div class="dim">no data</div></div>'
         )
 
@@ -144,26 +161,26 @@ def _timeseries_svg(
         lines.append(
             f'<polyline fill="none" stroke="{color}" stroke-width="1.5" points="{" ".join(poly_pts)}" />'
         )
-        legend_items.append(f'<span class="legend-dot" style="background:{color}"></span>{metric}')
+        legend_items.append(f'<span class="legend-dot" style="background:{color}"></span>{_e(metric)}')
 
     y_ticks = []
     for i in range(5):
         v = y_min + (y_max - y_min) * i / 4
         y_px = padding_t + chart_h - (v - y_min) / y_span * chart_h
         y_ticks.append(
-            f'<text x="{padding_l - 4}" y="{y_px:.1f}" class="tick-label" text-anchor="end">{value_formatter(v)}</text>'
+            f'<text x="{padding_l - 4}" y="{y_px:.1f}" class="tick-label" text-anchor="end">{_e(value_formatter(v))}</text>'
             f'<line x1="{padding_l}" x2="{width - padding_r}" y1="{y_px}" y2="{y_px}" stroke="#1a2440" />'
         )
 
     return f"""
     <div class="chart">
-      <h4>{title} · {len(all_y)} samples</h4>
+      <h4>{_e(title)} · {len(all_y)} samples</h4>
       <div class="legend">{" ".join(legend_items)}</div>
       <svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">
         <rect x="{padding_l}" y="{padding_t}" width="{chart_w}" height="{chart_h}" fill="#0b1220" stroke="#233256" />
         {"".join(y_ticks)}
         {"".join(lines)}
-        <text x="{padding_l}" y="{height - 4}" class="axis-label" fill="#94a3b8">{y_label}</text>
+        <text x="{padding_l}" y="{height - 4}" class="axis-label" fill="#94a3b8">{_e(y_label)}</text>
       </svg>
     </div>
     """
@@ -186,7 +203,8 @@ def render_run_html(
     redact: bool = False,
 ) -> str:
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    title = f"Anvil Run Report — {run['id']}"
+    run_id_safe = _e(run["id"])
+    title = f"Anvil Run Report — {run_id_safe}"
     pcie_at_run = (run.get("host_system") or {}).get("pcie_at_run") or {}
     pcie_cap = pcie_at_run.get("capability") or {}
     pcie_st = pcie_at_run.get("status") or {}
@@ -225,17 +243,18 @@ def render_run_html(
     device_block = ""
     if device:
         serial_display = _redact_serial(device.get("serial")) if redact else (device.get("serial", "—") or "—")
+        degraded_badge = ' <span class="badge warn">degraded</span>' if pcie_at_run.get('degraded') else ''
         device_block = f"""
         <h2>Device under test</h2>
         <table class="kv">
-          <tr><th>Model</th><td class="mono">{device.get('model', '—')}</td></tr>
-          <tr><th>Serial</th><td class="mono">{serial_display}</td></tr>
-          <tr><th>Firmware</th><td class="mono">{device.get('firmware') or '—'}</td></tr>
-          <tr><th>Vendor</th><td class="mono">{device.get('vendor') or '—'}</td></tr>
-          <tr><th>Protocol</th><td class="mono">{device.get('protocol', '—')}</td></tr>
-          <tr><th>Capacity</th><td class="mono">{_fmt_bytes(device.get('capacity_bytes'))}</td></tr>
-          <tr><th>PCIe capability</th><td class="mono">{pcie_cap.get('pcie_gen', '—')} x{pcie_cap.get('width', '—')}</td></tr>
-          <tr><th>PCIe actual</th><td class="mono">{pcie_st.get('pcie_gen', '—')} x{pcie_st.get('width', '—')}{' <span class="badge warn">degraded</span>' if pcie_at_run.get('degraded') else ''}</td></tr>
+          <tr><th>Model</th><td class="mono">{_e(device.get('model', '—'))}</td></tr>
+          <tr><th>Serial</th><td class="mono">{_e(serial_display)}</td></tr>
+          <tr><th>Firmware</th><td class="mono">{_e(device.get('firmware') or '—')}</td></tr>
+          <tr><th>Vendor</th><td class="mono">{_e(device.get('vendor') or '—')}</td></tr>
+          <tr><th>Protocol</th><td class="mono">{_e(device.get('protocol', '—'))}</td></tr>
+          <tr><th>Capacity</th><td class="mono">{_e(_fmt_bytes(device.get('capacity_bytes')))}</td></tr>
+          <tr><th>PCIe capability</th><td class="mono">{_e(pcie_cap.get('pcie_gen', '—'))} x{_e(pcie_cap.get('width', '—'))}</td></tr>
+          <tr><th>PCIe actual</th><td class="mono">{_e(pcie_st.get('pcie_gen', '—'))} x{_e(pcie_st.get('width', '—'))}{degraded_badge}</td></tr>
         </table>
         """
 
@@ -270,10 +289,10 @@ th {{ color: #94a3b8; font-weight: 500; font-size: 11px; text-transform: upperca
 </head><body>
 <h1>{title}</h1>
 <div class="meta">
-  Profile <span class="mono">{run['profile_name']}</span> ·
-  status <span class="mono">{run['status']}</span> ·
-  started <span class="mono">{run.get('started_at', '—')}</span> ·
-  finished <span class="mono">{run.get('finished_at', '—')}</span> ·
+  Profile <span class="mono">{_e(run['profile_name'])}</span> ·
+  status <span class="mono">{_e(run['status'])}</span> ·
+  started <span class="mono">{_e(run.get('started_at', '—'))}</span> ·
+  finished <span class="mono">{_e(run.get('finished_at', '—'))}</span> ·
   generated <span class="mono">{now}</span>
 </div>
 
@@ -298,9 +317,9 @@ th {{ color: #94a3b8; font-weight: 500; font-size: 11px; text-transform: upperca
 {temp_svg}
 
 <div class="footer">
-  Generated by Anvil {__version__}. Report includes every metric persisted
+  Generated by Anvil {_e(__version__)}. Report includes every metric persisted
   for this run. For the machine-readable bundle use
-  /api/runs/{run['id']}/export.json.
+  /api/runs/{run_id_safe}/export.json.
 </div>
 </body></html>
 """

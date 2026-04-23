@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/helixzz/anvil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/helixzz/anvil/actions/workflows/ci.yml)
 [![Release](https://github.com/helixzz/anvil/actions/workflows/release.yml/badge.svg)](https://github.com/helixzz/anvil/actions/workflows/release.yml)
-![version](https://img.shields.io/badge/version-0.13.0-orange)
+![version](https://img.shields.io/badge/version-0.14.0-orange)
 
 A web-based disk benchmark platform for lab environments. Built for engineers who
 frequently swap drives through a dedicated test bench and want to capture,

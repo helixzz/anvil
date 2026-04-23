@@ -4,7 +4,17 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -227,4 +237,18 @@ class SavedComparison(Base):
     created_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         _tz_datetime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class TuneReceipt(Base):
+    __tablename__ = "tune_receipts"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    results: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    reverted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        _tz_datetime, default=utcnow, nullable=False, index=True
+    )
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
     )

@@ -35,5 +35,20 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: true,
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("echarts") || id.includes("zrender")) return "vendor-echarts";
+          if (id.includes("react-dom") || id.includes("scheduler")) return "vendor-react";
+          if (id.includes("/react/")) return "vendor-react";
+          if (id.includes("@tanstack")) return "vendor-query";
+          if (id.includes("i18next")) return "vendor-i18n";
+          if (id.includes("react-router")) return "vendor-router";
+          return "vendor";
+        },
+      },
+    },
   },
 });

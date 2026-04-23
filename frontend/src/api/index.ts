@@ -357,6 +357,7 @@ export interface TuneResult {
 }
 
 export interface TuneReceipt {
+  receipt_id?: string;
   results: TuneResult[];
   reverted: boolean;
   revert_error?: string | null;
@@ -586,10 +587,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ keys: keys ?? null }),
     }),
-  tuneRevert: (results: TuneResult[]) =>
+  tuneRevert: (receiptId: string) =>
     jsonFetch<TuneReceipt>(`/api/environment/tune/revert`, {
       method: "POST",
-      body: JSON.stringify({ results }),
+      body: JSON.stringify({ receipt_id: receiptId }),
     }),
   fleetStats: () => jsonFetch<FleetStats>("/api/dashboard/fleet-stats"),
   leaderboards: (limit = 5) =>

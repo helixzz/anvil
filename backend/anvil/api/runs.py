@@ -463,6 +463,11 @@ async def export_run_html(
         content=html,
         headers={
             "Content-Disposition": f'inline; filename="anvil-run-{run_id}.html"',
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; img-src data:; "
+                "font-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+            ),
         },
     )
 

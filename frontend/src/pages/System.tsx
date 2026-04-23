@@ -42,7 +42,10 @@ export default function System() {
   });
 
   const revertMut = useMutation({
-    mutationFn: () => (lastReceipt ? api.tuneRevert(lastReceipt.results) : Promise.reject()),
+    mutationFn: () =>
+      lastReceipt?.receipt_id
+        ? api.tuneRevert(lastReceipt.receipt_id)
+        : Promise.reject(new Error("no receipt to revert")),
     onSuccess: (r) => {
       setLastReceipt(r);
       void q.refetch();
