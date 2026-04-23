@@ -26,7 +26,7 @@ from anvil.config import get_settings
 from anvil.db import session_scope
 from anvil.logging import configure_logging, get_logger
 from anvil.models import Device, Run, RunStatus, User, UserRole
-from anvil.orchestrator import get_queue
+from anvil.orchestrator import get_queue, reconcile_on_startup
 from anvil.runner import get_runner_client
 from anvil.schemas import SystemStatus
 
@@ -41,6 +41,15 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("anvil_starting", version=__version__, simulation=settings.simulation_mode)
     await _bootstrap_admin()
     get_queue().start()
+    try:
+        requeued = await reconcile_on_startup()
+        log.info(
+            "anvil_reconciled",
+            requeued_count=len(requeued),
+            requeued_ids=requeued,
+        )
+    except Exception as exc:
+        log.error("anvil_reconcile_failed", error=str(exc), exc_info=True)
     try:
         yield
     finally:

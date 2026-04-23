@@ -8,6 +8,53 @@ project:
   changes, or material bug fixes.
 - **PATCH** bumps are made for internal-only fixes and polish.
 
+## 0.15.0 — 2026-04-23
+
+### Fixed
+- **Runner disconnect no longer records a crashed run as `complete`.**
+  `RunnerClient.run_benchmark()` previously returned silently on EOF
+  or read-timeout, so a truncated stream let `_execute_run()` fall
+  straight into the smart-after / `RunStatus.COMPLETE` path — silent
+  result corruption. The stream now tracks whether it observed a
+  terminal event (`run_complete`, `run_failed`, or `run_aborted`) and
+  raises a new `RunnerStreamTruncated` exception if it did not. The
+  orchestrator's worker catches that exception and marks the run
+  `failed` with an explicit reason. A 3600 s read timeout also raises
+  instead of silently breaking out of the loop. Five new tests cover
+  the terminal-event contract (each of the three terminal kinds
+  accepted; missing-terminal and immediate-EOF both raise).
+- **Worker loop survives Postgres outages mid-run.** The except
+  branches in `JobQueue._run_forever()` previously called
+  `_mark_failed()` / `_mark_aborted()` directly, so a database error
+  during failure-marking propagated out of the worker task and the
+  entire queue stopped scheduling. Wrapped both calls in
+  `_safe_mark_failed()` / `_safe_mark_aborted()` that log the
+  persistence error but never raise, so a transient DB outage leaves
+  the worker loop intact to resume work when the DB returns. The
+  queue-get loop also catches and retries non-cancel exceptions with
+  a 1 s backoff.
+- **Defense-in-depth: `_execute_run()` refuses to mark a run
+  `complete` without having observed a `run_complete` event.** Even
+  if a future refactor breaks the stream-truncation guard, the
+  orchestrator now independently tracks `saw_complete` across the
+  event loop and raises if the generator exits cleanly without the
+  expected terminal event.
+
+### Added
+- **Startup reconciliation of in-flight runs.** New
+  `reconcile_on_startup()` runs in the FastAPI lifespan before the
+  queue worker takes its first job:
+  - `queued` rows are re-enqueued so an API restart between the
+    `INSERT` and the in-memory `asyncio.Queue.put()` no longer
+    strands a run forever.
+  - `preflight` / `running` rows are marked `failed` with the message
+    "API restarted while this run was in progress; partial state is
+    unrecoverable. Re-queue the run to try again." because the fio
+    process inside the runner container is gone and mid-phase state
+    cannot be recovered safely.
+  - Idempotent; safe to call more than once; failures during
+    reconciliation are logged but do not block startup.
+
 ## 0.14.0 — 2026-04-23
 
 ### Security

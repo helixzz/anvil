@@ -21,6 +21,17 @@ class RunnerEvent:
     payload: dict[str, Any]
 
 
+class RunnerStreamTruncated(RuntimeError):
+    """Raised when the runner stream closes without a terminal event.
+
+    A normal run ends with exactly one of `run_complete`, `run_failed`,
+    or `run_aborted`. If the stream yields EOF, a read timeout, or an
+    empty/unparseable message before that terminal event, the
+    orchestrator must treat the run as failed and never mark it
+    complete. Silencing this would be silent result corruption.
+    """
+
+
 class RunnerClient:
     def __init__(self, socket_path: Path):
         self.socket_path = socket_path
@@ -85,6 +96,7 @@ class RunnerClient:
         profile: dict[str, Any],
     ) -> AsyncIterator[RunnerEvent]:
         reader, writer = await asyncio.open_unix_connection(str(self.socket_path))
+        saw_terminal = False
         try:
             request = {
                 "id": secrets.token_hex(8),
@@ -103,7 +115,9 @@ class RunnerClient:
                     line = await asyncio.wait_for(reader.readline(), timeout=3600.0)
                 except TimeoutError:
                     log.warning("runner_read_timeout", run_id=run_id)
-                    break
+                    raise RunnerStreamTruncated(
+                        f"runner read timeout after 3600s with no terminal event for run {run_id}"
+                    ) from None
                 if not line:
                     break
                 try:
@@ -116,9 +130,14 @@ class RunnerClient:
                     break
                 yield RunnerEvent(run_id=run_id, kind=kind, payload=payload)
                 if kind in {"run_complete", "run_failed", "run_aborted"}:
+                    saw_terminal = True
                     break
         finally:
             await _close_writer(writer)
+        if not saw_terminal:
+            raise RunnerStreamTruncated(
+                f"runner stream closed before emitting a terminal event for run {run_id}"
+            )
 
 
 async def _close_writer(writer: asyncio.StreamWriter) -> None:

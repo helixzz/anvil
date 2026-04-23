@@ -59,7 +59,14 @@ class JobQueue:
 
     async def _run_forever(self) -> None:
         while True:
-            run_id = await self._queue.get()
+            try:
+                run_id = await self._queue.get()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.error("queue_get_failed", error=str(exc), exc_info=True)
+                await asyncio.sleep(1.0)
+                continue
             async with self._lock:
                 self._running_run_id = run_id
                 task = asyncio.create_task(_execute_run(run_id), name=f"anvil-run-{run_id}")
@@ -68,10 +75,10 @@ class JobQueue:
                     await task
                 except asyncio.CancelledError:
                     log.info("run_cancelled", run_id=run_id)
-                    await _mark_aborted(run_id)
+                    await _safe_mark_aborted(run_id)
                 except Exception as exc:
                     log.error("run_failed", run_id=run_id, error=str(exc), exc_info=True)
-                    await _mark_failed(run_id, str(exc))
+                    await _safe_mark_failed(run_id, str(exc))
                 finally:
                     self._running_run_id = None
                     self._running_task = None
@@ -111,6 +118,95 @@ async def _mark_aborted(run_id: str) -> None:
         f"runs:{run_id}",
         {"event": "run_aborted", "payload": {"run_id": run_id, "reason": "aborted by user"}},
     )
+
+
+async def _safe_mark_failed(run_id: str, error: str) -> None:
+    """Persist a failed-status transition but never raise.
+
+    Called from the worker's except-handler, so any exception here
+    would crash the worker task and stop all future scheduling. A DB
+    outage is bad, but a worker that gives up permanently is worse —
+    log and keep running so the worker can recover when the DB comes
+    back.
+    """
+    try:
+        await _mark_failed(run_id, error)
+    except Exception as exc:
+        log.error(
+            "mark_failed_failed",
+            run_id=run_id,
+            original_error=error,
+            persistence_error=str(exc),
+            exc_info=True,
+        )
+
+
+async def _safe_mark_aborted(run_id: str) -> None:
+    try:
+        await _mark_aborted(run_id)
+    except Exception as exc:
+        log.error(
+            "mark_aborted_failed",
+            run_id=run_id,
+            persistence_error=str(exc),
+            exc_info=True,
+        )
+
+
+async def reconcile_on_startup() -> list[str]:
+    """Recover runs that were in-flight when the API was killed.
+
+    There are three possible states to recover:
+
+    - `queued`: the row was committed but never pushed into the
+      in-memory asyncio.Queue (or was pushed and then lost to a
+      restart). Re-enqueue it so the worker picks it up.
+    - `preflight` / `running`: a worker had claimed the run but died
+      mid-execution. We cannot resume safely because the fio process
+      in the runner container is gone and any partial phase state is
+      now stale; mark the row failed with a clear reason so operators
+      know to re-queue it manually.
+
+    Called from the FastAPI lifespan after `session_scope` is ready and
+    before `JobQueue.start()`. Idempotent: safe to call more than once.
+    Returns the list of run IDs that were re-enqueued, for logging.
+    """
+    requeued: list[str] = []
+    async with session_scope() as session:
+        stale_rows = (
+            await session.execute(
+                select(Run).where(
+                    Run.status.in_(
+                        [RunStatus.PREFLIGHT.value, RunStatus.RUNNING.value]
+                    )
+                )
+            )
+        ).scalars().all()
+        for row in stale_rows:
+            row.status = RunStatus.FAILED.value
+            row.finished_at = datetime.now(UTC)
+            row.error_message = (
+                "API restarted while this run was in progress; partial state "
+                "is unrecoverable. Re-queue the run to try again."
+            )
+            log.warning(
+                "run_failed_on_reconcile",
+                run_id=row.id,
+                previous_status=row.status,
+            )
+        queued_rows = (
+            await session.execute(
+                select(Run)
+                .where(Run.status == RunStatus.QUEUED.value)
+                .order_by(Run.queued_at.asc())
+            )
+        ).scalars().all()
+        requeued = [r.id for r in queued_rows]
+    queue = get_queue()
+    for run_id in requeued:
+        await queue.submit(run_id)
+        log.info("run_requeued_on_reconcile", run_id=run_id)
+    return requeued
 
 
 async def _execute_run(run_id: str) -> None:
@@ -183,6 +279,7 @@ async def _execute_run(run_id: str) -> None:
             session.add(phase)
             phase_id_by_name[spec.name] = phase_id
 
+    saw_complete = False
     async for event in client.run_benchmark(
         run_id=run_id,
         device_path=device_path,
@@ -214,6 +311,13 @@ async def _execute_run(run_id: str) -> None:
                 else:
                     run.error_message = err or reason
             return
+        if event.kind == "run_complete":
+            saw_complete = True
+
+    if not saw_complete:
+        raise RuntimeError(
+            f"runner stream for run {run_id} ended without a run_complete event"
+        )
 
     try:
         smart_after = await client.smart(device_path)
