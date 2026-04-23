@@ -1,12 +1,84 @@
 # Changelog
 
 All notable changes to Anvil are recorded here. Versioning follows
-[Semantic Versioning](https://semver.org/) as interpreted for a pre-1.0
-project:
+[Semantic Versioning](https://semver.org/):
 
-- **MINOR** bumps are made for user-visible feature additions, schema
-  changes, or material bug fixes.
-- **PATCH** bumps are made for internal-only fixes and polish.
+- **MAJOR** bumps for breaking API or on-disk format changes.
+- **MINOR** bumps for user-visible feature additions and schema changes.
+- **PATCH** bumps for internal-only fixes and polish.
+
+## 1.0.0 — 2026-04-23
+
+First stable release. Anvil 1.0.0 is the culmination of 17 cycles of
+feature and hardening work. The public HTTP API, the runner RPC, the
+on-disk schema (including all Alembic migrations through
+`20260423_0005_tune_receipts`), the profile contract, and the report
+export formats are now considered stable; backwards-incompatible
+changes to any of these will force a MAJOR bump.
+
+### What's in the box
+- **Benchmark profiles**: `sweep_quick`, `sweep_full`,
+  `snia_quick_pts`, `endurance_soak`, plus the standard precondition
+  / measurement / cleanup phase model. Every profile runs
+  `fio --output-format=json+` in the privileged runner container.
+- **SNIA SSS-PTS v2.0.2 steady-state**: automatic IOPS / latency /
+  bandwidth steady-state evaluation on eligible profiles with slope
+  + range gates and a SniaAnalysisCard on Run Detail.
+- **Thermal auto-abort**: runs that exceed 75 °C for 6 consecutive
+  SMART samples are cancelled with a `thermal_abort` reason.
+- **PCIe link reporting**: every run captures device capability vs.
+  runtime link state from `lspci -vvv`; degraded-link warning on
+  Run, Device, and Dashboard.
+- **Cross-model comparison** (`/compare`): multi-select runs,
+  common-phase intersection, bar + scatter overlay, URL-state sync.
+- **Saved comparisons + public share links** (`/r/runs/{slug}`,
+  `/r/compare/{slug}`): serial-redacted, zero-JS, strict-CSP public
+  HTML views; revocable.
+- **Run report exports**: self-contained HTML (SVG charts, print to
+  PDF) and lossless JSON bundle per run; via authenticated API and
+  revocable public share links.
+- **Overview dashboard**: 6 KPI cards, PCIe-degraded alert,
+  alarms, 30-day activity, 4 leaderboards, recent runs.
+- **RBAC**: viewer / operator / admin with bcrypt passwords and
+  12 h HS256 JWTs. Bootstrap `admin` user auto-created on first
+  boot; `/admin/users` CRUD for admins.
+- **Admin-configurable SSO** with group→role mapping and
+  optimistic-locking on concurrent config edits. Note: the
+  production SAML ACS is out of scope for 1.0.0; the
+  `/api/auth/sso/assertion` endpoint is an admin-only smoke test
+  that never accepts unauthenticated callers.
+- **One-click environment auto-tune**: 5 host tunables
+  (cpu governor, PCIe ASPM, NVMe scheduler / nr_requests /
+  read-ahead) with server-side persisted receipts; revert by
+  opaque `receipt_id`, path-allowlist enforced inside the runner.
+- **Crash-safe orchestrator**: explicit terminal-event contract with
+  the runner (EOF / timeout → failed, never silently complete), DB
+  outage fault-isolation in the worker loop, and startup
+  reconciliation for stranded `queued` / `preflight` / `running`
+  rows.
+- **i18n**: English + Chinese across every UI string.
+- **CI**: ruff + 86 pytest tests on Python 3.11 + 3.12, full
+  frontend build, Compose integration smoke test, version-sync gate.
+
+### Security posture at 1.0.0
+- Every interpolated value in report HTML is `html.escape()`'d.
+- Public share responses carry a strict Content-Security-Policy plus
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+  `X-Robots-Tag: noindex`.
+- Share slugs are 128-bit `secrets.token_urlsafe(16)` tokens; the
+  active slug is disclosed only to operator+admin roles.
+- Env-tune revert never accepts client-supplied paths; the runner
+  refuses any write outside a sysfs-glob allowlist.
+- CORS defaults to an empty origin list (middleware not installed);
+  wildcard + credentials is downgraded with a warning.
+
+### Backwards-compatibility notes for operators
+- Alembic heads: `20260423_0005`. Upgrade from any 0.x with
+  `alembic upgrade head`.
+- The legacy bearer token (`ANVIL_BEARER_TOKEN`) remains a valid
+  admin credential for automation.
+- The frontend vendor bundle is now code-split; deployments behind a
+  cache must invalidate the `dist/assets/` prefix on upgrade.
 
 ## 0.17.0 — 2026-04-23
 
