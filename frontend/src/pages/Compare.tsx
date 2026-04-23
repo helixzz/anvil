@@ -39,6 +39,32 @@ function parseSlugsFromUrl(raw: string | null): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+function ShareCurrentView({ disabled }: { disabled: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    const url = window.location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      window.prompt("Copy this comparison URL:", url);
+    }
+  }
+
+  return (
+    <button
+      onClick={copy}
+      disabled={disabled}
+      title="Copy a shareable URL that recreates this comparison view"
+      style={{ fontSize: 12 }}
+    >
+      {copied ? "Copied!" : "Share view"}
+    </button>
+  );
+}
+
 export default function Compare() {
   const { t } = useTranslation();
   const [search, setSearch] = useSearchParams();
@@ -178,6 +204,7 @@ export default function Compare() {
             {t("compare.subtitle")}
           </div>
         </div>
+        <ShareCurrentView disabled={selected.length === 0} />
       </div>
 
       <div className="card">

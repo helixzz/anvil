@@ -7,6 +7,15 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.0.1 — 2026-04-23
+
+### Added
+- **"Share view" button on the Compare page.** Copies the current URL
+  (with `models=`, `phase=`, `metric=` query-string state) to the
+  clipboard so anyone with access to the lab can reproduce the same
+  comparison view. Falls back to a prompt when the Clipboard API is
+  blocked (non-HTTPS LAN deployments, older browsers).
+
 ## 1.0.0 — 2026-04-23
 
 First stable release. Anvil 1.0.0 is the culmination of 17 cycles of
