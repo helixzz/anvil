@@ -212,16 +212,27 @@ def preview(keys: list[str] | None = None) -> list[dict[str, Any]]:
 
 
 def apply(keys: list[str] | None = None) -> TuneReceipt:
-    """Write desired_value to every matched path. On any write failure,
-    revert all previously-successful writes.
+    """Write desired_value to every matched path.
 
-    Returns a TuneReceipt including per-path before/after so an admin can
-    see exactly what changed and pass the receipt back to revert() later
-    if they want to roll the changes back without recomputing before-
-    values.
+    Transaction semantics are PER TUNABLE KEY, not per batch. Each key
+    (cpu_governor, nvme_scheduler, etc.) is its own all-or-nothing
+    unit: if any write for that key fails, the prior writes for THAT
+    SAME KEY are rolled back and the key is marked failed. But a
+    failure in one key (e.g. nvme_nr_requests rejected with EINVAL on
+    a drive that caps at 1023) does not roll back successful writes
+    from other keys (e.g. cpu_governor that already flipped all 128
+    CPUs to performance). This matches what operators want: "tune
+    everything you can, report everything you couldn't."
+
+    The returned receipt's `reverted` flag is set True only when EVERY
+    successful write in the receipt had to be rolled back because
+    EVERY key failed. Mixed outcomes leave `reverted=False` and the
+    per-result `ok` field tells the operator what actually stuck.
     """
     wanted = keys or list(TUNABLES_BY_KEY.keys())
     receipt = TuneReceipt()
+    any_success = False
+    any_failure = False
 
     for key in wanted:
         t = TUNABLES_BY_KEY.get(key)
@@ -232,53 +243,71 @@ def apply(keys: list[str] | None = None) -> TuneReceipt:
                     error="unknown key",
                 )
             )
+            any_failure = True
             continue
+
+        per_key_results: list[TuneResult] = []
+        per_key_failed = False
         for p in _glob_host(t.path_glob):
             before_raw = _read_sysfs(p)
             before = _current_value_for_display(before_raw)
             if before == t.desired_value:
-                receipt.results.append(
+                per_key_results.append(
                     TuneResult(key=key, path=p, before=before, after=before, ok=True)
                 )
                 continue
             try:
                 _write_sysfs(p, t.desired_value)
             except OSError as exc:
-                receipt.results.append(
+                per_key_results.append(
                     TuneResult(
                         key=key, path=p, before=before, after=None, ok=False,
                         error=f"{exc.__class__.__name__}: {exc}",
                     )
                 )
-                _revert_partial(receipt)
-                receipt.reverted = True
-                return receipt
+                per_key_failed = True
+                break
             after_raw = _read_sysfs(p)
             after = _current_value_for_display(after_raw)
-            receipt.results.append(
+            per_key_results.append(
                 TuneResult(key=key, path=p, before=before, after=after, ok=True)
             )
+
+        if per_key_failed:
+            _revert_results(per_key_results)
+            for r in per_key_results:
+                if r.ok:
+                    r.ok = False
+                    r.after = r.before
+                    r.error = (
+                        r.error or f"rolled back because another {key} write failed"
+                    )
+            any_failure = True
+        else:
+            any_success = True
+
+        receipt.results.extend(per_key_results)
+
+    if any_failure and not any_success:
+        receipt.reverted = True
+
     return receipt
 
 
-def _revert_partial(receipt: TuneReceipt) -> None:
-    """Walk the receipt in reverse, restoring before-values for ok results.
+def _revert_results(results: list[TuneResult]) -> None:
+    """Best-effort revert of the `ok` entries in a result list.
 
-    Called from apply() when a later write fails mid-batch; the earlier
-    writes are rolled back so the host either fully changes or is left
-    untouched. Revert errors are captured on the receipt rather than
-    raising — the caller already has a primary failure to surface.
+    Used by per-key transaction rollback in `apply()`. Errors during
+    rollback are swallowed and recorded separately; the primary
+    failure is already being surfaced to the caller.
     """
-    errors: list[str] = []
-    for r in reversed(receipt.results):
+    for r in reversed(results):
         if not r.ok or r.before is None or r.before == r.after:
             continue
         try:
             _write_sysfs(r.path, r.before)
-        except OSError as exc:
-            errors.append(f"{r.path}: {exc}")
-    if errors:
-        receipt.revert_error = "; ".join(errors)
+        except OSError:
+            pass
 
 
 def revert(receipt_results: list[dict[str, Any]]) -> TuneReceipt:

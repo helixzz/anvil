@@ -53,6 +53,15 @@ export default function System() {
     },
   });
 
+  const applyErrorMessage = applyMut.error
+    ? String((applyMut.error as Error).message ?? applyMut.error)
+    : null;
+  const revertErrorMessage = revertMut.error
+    ? String((revertMut.error as Error).message ?? revertMut.error)
+    : null;
+  const lastReceiptOkCount = lastReceipt?.results.filter((r) => r.ok).length ?? 0;
+  const lastReceiptFailCount = lastReceipt?.results.filter((r) => !r.ok).length ?? 0;
+
   const grouped = useMemo(() => {
     const groups: Record<string, EnvironmentCheck[]> = {};
     for (const c of q.data?.checks ?? []) {
@@ -190,10 +199,35 @@ export default function System() {
                   </tbody>
                 </table>
               )}
+              {(applyErrorMessage || revertErrorMessage) && (
+                <div
+                  className="badge badge-err"
+                  style={{ marginTop: 8, padding: 8, display: "block" }}
+                >
+                  {applyErrorMessage || revertErrorMessage}
+                </div>
+              )}
               {lastReceipt && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 12, marginBottom: 6 }}>
-                    {lastReceipt.reverted ? t("tune.revertedReceipt") : t("tune.appliedReceipt")}
+                  <div style={{ fontSize: 12, marginBottom: 6, display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <span>
+                      {lastReceipt.reverted ? t("tune.revertedReceipt") : t("tune.appliedReceipt")}
+                    </span>
+                    {lastReceiptOkCount > 0 && (
+                      <span className="badge badge-ok">
+                        {lastReceiptOkCount} ok
+                      </span>
+                    )}
+                    {lastReceiptFailCount > 0 && (
+                      <span className="badge badge-err">
+                        {lastReceiptFailCount} failed
+                      </span>
+                    )}
+                    {lastReceipt.reverted && lastReceiptFailCount > 0 && (
+                      <span className="dim" style={{ fontSize: 11 }}>
+                        — all writes rolled back because every tunable failed
+                      </span>
+                    )}
                   </div>
                   <table>
                     <thead>

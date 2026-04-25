@@ -7,6 +7,51 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.2.3 — 2026-04-23
+
+### Fixed
+- **Auto-tune apply silently rolled back all changes when even one
+  tunable hit a kernel EINVAL.** On the production server with 128
+  CPUs and 7 NVMe namespaces, clicking "Apply" would:
+  1. Successfully write `performance` to all 128 cpu_governor paths
+  2. Successfully set pcie_aspm_policy to `performance`
+  3. Successfully set `scheduler=none` on all 7 NVMe namespaces
+  4. **Fail** writing `nr_requests=2048` on the first NVMe drive
+     because the driver caps that drive at 1023 (`OSError: [Errno 22]
+     Invalid argument`)
+  5. The old all-or-nothing transaction triggered a full rollback:
+     every previously-successful write was undone in reverse order,
+     the host kernel ended up exactly where it started, the receipt
+     claimed `reverted: true` with `ok_count: 136`, and the UI showed
+     no error popup.
+
+  Fix: transaction boundaries are now **per tunable key**, not per
+  batch. If `nvme_nr_requests` fails, only that key's partial writes
+  are rolled back — `cpu_governor`, `pcie_aspm_policy`, and
+  `nvme_scheduler` stay applied. The receipt's `reverted` flag is
+  now True only when *every* key failed (all-or-nothing). Mixed
+  outcomes leave `reverted: false` and the per-result `ok` field
+  tells the operator exactly which tunables stuck and which didn't.
+  4 new tests cover per-key isolation, the all-failed→reverted case,
+  the all-succeeded case, and intra-key partial failure rollback.
+
+- **Apply / revert errors are now visible in the UI.** The
+  `applyMut` and `revertMut` mutations previously had no `onError`
+  handler; a network failure, 500 error, or SSO-revoked-admin 403
+  would silently disappear and the user would be left wondering why
+  the button "did nothing." The System page now shows a red error
+  banner with the server's error message on any mutation failure.
+- **Apply/revert receipts now show counts** alongside the result
+  table: `N ok`, `M failed`, plus a specific callout when a full
+  rollback happened so it's impossible to mistake a no-op apply for
+  a successful one.
+
+### Notes
+- The old `_revert_partial()` helper has been replaced by
+  `_revert_results(results)` which operates on a per-key result
+  list instead of the whole receipt. Public API (`apply`,
+  `revert`, the `/api/environment/tune/*` endpoints) is unchanged.
+
 ## 1.2.2 — 2026-04-23
 
 ### Fixed
