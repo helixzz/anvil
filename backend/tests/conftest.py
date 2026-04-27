@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
+from pathlib import Path
 
 os.environ.setdefault("ANVIL_BEARER_TOKEN", "test-bearer-token-xxxxxxxxxxxxxxxxxxxx")
 os.environ.setdefault("ANVIL_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("ANVIL_RUNNER_SOCKET", "/tmp/nonexistent-anvil-runner.sock")
-
-from collections.abc import AsyncIterator
+os.environ.setdefault("ANVIL_DATA_DIR", "/tmp/anvil-test-data")
 
 import pytest
 import pytest_asyncio
@@ -16,6 +17,8 @@ from sqlalchemy.pool import StaticPool
 
 from anvil import db as anvil_db
 from anvil.config import get_settings
+
+Path(os.environ["ANVIL_DATA_DIR"]).mkdir(parents=True, exist_ok=True)
 
 
 @pytest_asyncio.fixture

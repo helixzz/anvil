@@ -29,11 +29,28 @@ function LanguageSwitcher() {
 
 function TokenGate({ onAuth }: { onAuth: () => void }) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<"login" | "token">("login");
+  const [mode, setMode] = useState<"sso" | "login" | "token">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [tokenValue, setTokenValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const ssoQ = useQuery({
+    queryKey: ["sso-status"],
+    queryFn: api.ssoStatus,
+    staleTime: 60000,
+  });
+  const ssoEnabled = ssoQ.data?.enabled === true;
+
+  useEffect(() => {
+    if (ssoEnabled && mode === "login" && !username && !password) {
+      setMode("sso");
+    }
+  }, [ssoEnabled, mode, username, password]);
+
+  function handleSsoLogin() {
+    window.location.href = "/api/auth/sso/login?return_to=" + encodeURIComponent(window.location.pathname || "/");
+  }
 
   async function submitLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -66,58 +83,87 @@ function TokenGate({ onAuth }: { onAuth: () => void }) {
     <div className="token-gate">
       <div className="card">
         <h2>{t("auth.title")}</h2>
-        <div className="row" style={{ gap: 8, marginBottom: 12 }}>
-          <button
-            className={mode === "login" ? "btn-primary" : ""}
-            onClick={() => setMode("login")}
-          >
-            {t("auth.modeLogin")}
-          </button>
-          <button
-            className={mode === "token" ? "btn-primary" : ""}
-            onClick={() => setMode("token")}
-          >
-            {t("auth.modeToken")}
-          </button>
-        </div>
-        {mode === "login" ? (
-          <form onSubmit={submitLogin} className="col">
-            <p className="dim" style={{ fontSize: 12 }}>{t("auth.loginHelp")}</p>
-            <input
-              type="text"
-              autoComplete="username"
-              value={username}
-              placeholder={t("auth.usernamePlaceholder")}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-            />
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              placeholder={t("auth.passwordPlaceholder")}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <button type="submit" className="btn-primary">
-              {t("auth.submitLogin")}
+
+        {ssoEnabled && mode === "sso" && (
+          <div className="col" style={{ gap: 12, alignItems: "center" }}>
+            <button className="btn-primary" onClick={handleSsoLogin} style={{ padding: "12px 32px", fontSize: 15 }}>
+              Sign in with SSO
             </button>
-            {error && <div className="badge badge-err">{error}</div>}
-          </form>
-        ) : (
-          <form onSubmit={submitToken} className="col">
-            <p className="dim" style={{ fontSize: 12 }}>{t("auth.description")}</p>
-            <input
-              type="password"
-              value={tokenValue}
-              placeholder={t("auth.tokenPlaceholder")}
-              onChange={(e) => setTokenValue(e.target.value)}
-              autoFocus
-            />
-            <button type="submit" className="btn-primary">
-              {t("auth.submit")}
+            <button
+              className="dim"
+              onClick={() => setMode("login")}
+              style={{ fontSize: 12, textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+            >
+              or use a local account
             </button>
-            {error && <div className="badge badge-err">{error}</div>}
-          </form>
+          </div>
+        )}
+
+        {(!ssoEnabled || mode !== "sso") && (
+          <>
+            <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+              <button
+                className={mode === "login" ? "btn-primary" : ""}
+                onClick={() => setMode("login")}
+              >
+                {t("auth.modeLogin")}
+              </button>
+              <button
+                className={mode === "token" ? "btn-primary" : ""}
+                onClick={() => setMode("token")}
+              >
+                {t("auth.modeToken")}
+              </button>
+              {ssoEnabled && (
+                <button
+                  className="dim"
+                  onClick={() => setMode("sso")}
+                  style={{ fontSize: 12 }}
+                >
+                  SSO
+                </button>
+              )}
+            </div>
+            {mode === "login" ? (
+              <form onSubmit={submitLogin} className="col">
+                <p className="dim" style={{ fontSize: 12 }}>{t("auth.loginHelp")}</p>
+                <input
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  placeholder={t("auth.usernamePlaceholder")}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoFocus
+                />
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  placeholder={t("auth.passwordPlaceholder")}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button type="submit" className="btn-primary">
+                  {t("auth.submitLogin")}
+                </button>
+                {error && <div className="badge badge-err">{error}</div>}
+              </form>
+            ) : (
+              <form onSubmit={submitToken} className="col">
+                <p className="dim" style={{ fontSize: 12 }}>{t("auth.description")}</p>
+                <input
+                  type="password"
+                  value={tokenValue}
+                  placeholder={t("auth.tokenPlaceholder")}
+                  onChange={(e) => setTokenValue(e.target.value)}
+                  autoFocus
+                />
+                <button type="submit" className="btn-primary">
+                  {t("auth.submit")}
+                </button>
+                {error && <div className="badge badge-err">{error}</div>}
+              </form>
+            )}
+          </>
         )}
       </div>
       <div style={{ textAlign: "center" }}>
@@ -129,8 +175,18 @@ function TokenGate({ onAuth }: { onAuth: () => void }) {
 
 export default function App() {
   const { t } = useTranslation();
-  const [authenticated, setAuthenticated] = useState<boolean>(!!getToken());
   const navigate = useNavigate();
+  const [authenticated, setAuthenticated] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get("token");
+    if (urlToken) {
+      setToken(urlToken);
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, "", cleanUrl);
+      return true;
+    }
+    return !!getToken();
+  });
 
   useEffect(() => {
     const handler = () => setAuthenticated(false);

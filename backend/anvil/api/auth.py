@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any
 
 import ulid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +21,15 @@ from anvil.auth import (
 )
 from anvil.config import Settings, get_settings
 from anvil.db import get_session
+from anvil.logging import get_logger
 from anvil.models import AuditLog, User, UserRole
+from anvil.saml_sp import (
+    SamlValidationError,
+    build_sp_settings,
+    generate_metadata_xml,
+    prepare_login,
+    process_acs,
+)
 from anvil.sso import (
     GroupRoleMapping,
     SsoConfig,
@@ -367,4 +377,150 @@ async def sso_assertion(
             "role": user.role,
             "display_name": user.display_name,
         },
+    )
+
+
+@router.get("/auth/sso/status")
+async def sso_status(
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    config = await load_sso_config(session)
+    return {
+        "enabled": config.enabled,
+        "sp_entity_id": config.sp_entity_id,
+        "idp_entity_id": config.idp_entity_id,
+    }
+
+
+@router.get("/auth/sso/login")
+async def sso_login(
+    return_to: str = Query("/", alias="return_to"),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    config = await load_sso_config(session)
+    if not config.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="SSO is not enabled.",
+        )
+    settings_obj = get_settings()
+    sp_settings = await asyncio.to_thread(
+        build_sp_settings,
+        sp_entity_id=config.sp_entity_id,
+        sp_acs_url=config.sp_acs_url or f"http://localhost:{settings_obj.port}",
+        idp_metadata_url=config.idp_metadata_url,
+        idp_entity_id=config.idp_entity_id,
+        data_dir=settings_obj.data_dir,
+        verify_ssl=config.sp_acs_url.startswith("https://") if config.sp_acs_url else True,
+    )
+    idp_url = await asyncio.to_thread(
+        prepare_login, sp_settings, relay_state=return_to,
+    )
+    if not idp_url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not generate SSO redirect URL. Check IdP metadata.",
+        )
+    return RedirectResponse(url=idp_url, status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/auth/sso/acs")
+async def sso_acs(
+    SAMLResponse: str = Query(default=""),
+    RelayState: str = Query(default="/"),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    config = await load_sso_config(session)
+    if not config.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="SSO is not enabled.",
+        )
+    settings_obj = get_settings()
+    sp_settings = await asyncio.to_thread(
+        build_sp_settings,
+        sp_entity_id=config.sp_entity_id,
+        sp_acs_url=config.sp_acs_url or f"http://localhost:{settings_obj.port}",
+        idp_metadata_url=config.idp_metadata_url,
+        idp_entity_id=config.idp_entity_id,
+        data_dir=settings_obj.data_dir,
+        verify_ssl=config.sp_acs_url.startswith("https://") if config.sp_acs_url else True,
+    )
+    try:
+        result = await asyncio.to_thread(
+            process_acs,
+            sp_settings,
+            saml_response_b64=SAMLResponse,
+            relay_state=RelayState,
+        )
+    except SamlValidationError as exc:
+        get_logger("anvil.api.auth").error(
+            "sso_acs_validation_failed",
+            reason=exc.reason,
+            detail=str(exc),
+        )
+        detail = str(exc)[:400]
+        return HTMLResponse(
+            content=f"<html><body><h2>SSO sign-in failed</h2><p>{detail}</p>"
+            f"<p><a href=\"/\">Return to Anvil</a></p></body></html>",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    username = result["username"] or ""
+    groups: list[str] = []
+    attrs = result.get("attributes") or {}
+    groups_key = config.groups_attribute or "memberOf"
+    if groups_key in attrs:
+        groups = [str(g) for g in attrs[groups_key]]
+    display_name = None
+    if config.display_name_attribute and config.display_name_attribute in attrs:
+        vals = attrs[config.display_name_attribute]
+        display_name = str(vals[0]) if vals else None
+
+    user = await provision_sso_user(
+        session,
+        username=username,
+        display_name=display_name,
+        groups=groups,
+        config=config,
+    )
+    await session.flush()
+    token = create_jwt(user, secret=settings_obj.bearer_token)
+    _audit(
+        session,
+        actor=user.username,
+        action="sso_login",
+        target=user.id,
+        details={"groups": groups, "assigned_role": user.role},
+    )
+    await session.commit()
+
+    frontend_url = config.sp_acs_url or "/"
+    if frontend_url.endswith("/"):
+        frontend_url = frontend_url.rstrip("/")
+    separator = "&" if "?" in frontend_url else "?"
+    redirect_url = f"{frontend_url}{separator}token={token}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/auth/sso/metadata", response_class=Response)
+async def sso_metadata(
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    config = await load_sso_config(session)
+    settings_obj = get_settings()
+    sp_settings = await asyncio.to_thread(
+        build_sp_settings,
+        sp_entity_id=config.sp_entity_id,
+        sp_acs_url=config.sp_acs_url or f"http://localhost:{settings_obj.port}",
+        idp_metadata_url=config.idp_metadata_url,
+        idp_entity_id=config.idp_entity_id,
+        data_dir=settings_obj.data_dir,
+        verify_ssl=config.sp_acs_url.startswith("https://") if config.sp_acs_url else True,
+    )
+    xml = await asyncio.to_thread(generate_metadata_xml, sp_settings)
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Content-Disposition": "inline; filename=anvil-sp-metadata.xml"},
     )

@@ -7,6 +7,66 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.3.0 — 2026-04-27
+
+### Added
+- **Production SAML SSO via python3-saml.** New `anvil.saml_sp` module
+  wraps the OneLogin python3-saml library to handle the full SAML
+  cryptographic protocol:
+  - `build_sp_settings()` — constructs OneLogin settings from
+    admin-configurable SSO fields (entity ID, ACS URL, IdP metadata
+    URL), auto-generates a self-signed SP certificate / key pair on
+    first boot in `ANVIL_DATA_DIR`.
+  - `prepare_login()` — SP-initiated SSO flow: generates an
+    AuthnRequest and returns the IdP redirect URL.
+  - `process_acs()` — validates IdP-signed AuthnResponse (signature,
+    issuer, NotOnOrAfter window, audience), extracts user attributes.
+  - `generate_metadata_xml()` — produces the SP metadata XML for IdP
+    administrator upload.
+  - When no IdP metadata is configured yet, a placeholder config with
+    `strict=False` is used so the SP metadata XML can still be
+    generated and downloaded — the chicken-and-egg setup where the
+    IdP admin needs SP metadata before configuring the IdP side.
+- **`GET /api/auth/sso/status`** (public) — returns `{enabled,
+  sp_entity_id, idp_entity_id}`. The frontend uses this on the login
+  page to decide whether to show the SSO button as primary CTA.
+- **`GET /api/auth/sso/login`** (public) — SP-initiated SSO: redirects
+  the browser to the IdP's single-sign-on URL with a signed
+  AuthnRequest. Gated behind the SSO config's `enabled` flag (returns
+  403 when SSO is off). Respects forwarded headers for ACS URL
+  construction behind reverse proxies.
+- **`POST /api/auth/sso/acs`** (public) — Assertion Consumer Service.
+  Receives the SAML AuthnResponse POST from the IdP, validates it
+  cryptographically, extracts the username + group attributes,
+  provisions or syncs the Anvil User row via `provision_sso_user()`,
+  issues a JWT, and redirects the browser back to the frontend with
+  `?token=<jwt>` in the URL. On validation failure, returns a
+  human-readable HTML error page with a "Return to Anvil" link.
+- **`GET /api/auth/sso/metadata`** (public) — serves the SP metadata
+  XML with Content-Type `application/xml` for IdP admin download.
+- **Login page SSO toggle**. When SSO is enabled (as reported by
+  `/api/auth/sso/status`), the login page shows a prominent "Sign in
+  with SSO" button, with an "or use a local account" link underneath
+  that reveals the standard username/password + bearer token forms.
+  When SSO is disabled, the page falls back to local login only.
+  After SSO ACS completes, the frontend detects `?token=` in the URL,
+  stores the JWT, strips the query param from the browser history, and
+  proceeds as authenticated.
+- **Docker**: `openssl` added to the backend image for SP certificate
+  generation.
+
+### Migrations
+- None. All changes are application-layer; the existing
+  `app_settings.sso` JSONB row and `users` table are reused. On first
+  boot, SP cert/key are written to `ANVIL_DATA_DIR/saml_sp.{crt,key}`.
+
+### Tests
+- 5 new tests for the SSO endpoints (`test_sso_endpoints.py`):
+  status reports enabled=false by default, status reflects admin
+  config changes, login returns 403 when disabled, metadata returns
+  valid XML with correct entity ID, metadata includes the constructed
+  ACS URL. 109 total tests.
+
 ## 1.2.3 — 2026-04-23
 
 ### Fixed

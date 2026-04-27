@@ -511,6 +511,10 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   getSsoConfig: () => jsonFetch<SsoConfig>("/api/auth/sso/config"),
+  ssoStatus: () =>
+    jsonFetch<{ enabled: boolean; sp_entity_id: string; idp_entity_id: string }>(
+      "/api/auth/sso/status",
+    ),
   saveSsoConfig: (config: SsoConfig) =>
     jsonFetch<SsoConfig>("/api/auth/sso/config", {
       method: "PUT",
