@@ -217,15 +217,52 @@ async def delete_user(
             detail="admins cannot delete themselves",
         )
     await session.delete(user)
-    _audit(
-        session,
-        actor=principal.username,
-        action="user_deleted",
-        target=user.id,
-        details={"username": user.username},
-    )
     await session.commit()
-    return {"deleted": user.id}
+    return {"deleted": user_id}
+
+
+@admin_router.get("/audit-log")
+async def list_audit_log(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 100,
+    before: str | None = None,
+    action: str | None = None,
+    actor: str | None = None,
+) -> dict[str, Any]:
+    rows_q = select(AuditLog).order_by(AuditLog.id.desc())
+    if before:
+        rows_q = rows_q.where(AuditLog.id < int(before))
+    if action:
+        rows_q = rows_q.where(AuditLog.action == action)
+    if actor:
+        rows_q = rows_q.where(AuditLog.actor == actor)
+    rows_q = rows_q.limit(limit + 1)
+
+    result = await session.execute(rows_q)
+    rows = list(result.scalars())
+    has_more = len(rows) > limit
+    items = [
+        {
+            "id": r.id,
+            "ts": r.ts.isoformat() if r.ts else None,
+            "actor": r.actor,
+            "action": r.action,
+            "target": r.target,
+            "details": r.details,
+        }
+        for r in rows[:limit]
+    ]
+
+    actions_q = select(AuditLog.action).distinct().order_by(AuditLog.action)
+    action_results = await session.execute(actions_q)
+    actions = sorted({a for (a,) in action_results if a})
+
+    return {
+        "items": items,
+        "has_more": has_more,
+        "next_before": items[-1]["id"] if items else None,
+        "actions": actions,
+    }
 
 
 class MappingEntry(BaseModel):
@@ -419,7 +456,7 @@ async def sso_login(
     if not idp_url:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Could not generate SSO redirect URL. Check IdP metadata.",
+            detail="Could not generate SSO redirect URL. Check that IdP metadata is reachable.",
         )
     return RedirectResponse(url=idp_url, status_code=status.HTTP_302_FOUND)
 

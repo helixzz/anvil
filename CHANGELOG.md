@@ -7,6 +7,23 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.3.1 — 2026-04-27
+
+### Added
+- **Audit log viewer** at `/admin/audit-log` (admin only).
+  - `GET /api/admin/audit-log` returns cursor-paginated entries
+    sorted newest-first, with optional filtering by `action` and
+    `actor`. Includes the full list of distinct action names so the
+    UI can offer a dropdown filter.
+  - Frontend page: table view (timestamp / actor / action / target /
+    details JSON), dropdown action filter, text actor filter, and
+    Previous / Next pagination controls. Row count and "has more"
+    indicator for long scroll-back.
+- **Docs**: hosted docs site automatically rebuilt on push.
+
+### Changed
+- SSO login endpoint error message clarified.
+
 ## 1.3.0 — 2026-04-27
 
 ### Added

@@ -543,6 +543,20 @@ export const api = {
     jsonFetch<{ deleted: string }>(`/api/admin/users/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
+  adminAuditLog: (params?: { limit?: number; before?: string; action?: string; actor?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.before) qs.set("before", params.before);
+    if (params?.action) qs.set("action", params.action);
+    if (params?.actor) qs.set("actor", params.actor);
+    const suffix = qs.toString() ? "?" + qs.toString() : "";
+    return jsonFetch<{
+      items: { id: number; ts: string; actor: string | null; action: string; target: string | null; details: Record<string, unknown> | null }[];
+      has_more: boolean;
+      next_before: number | null;
+      actions: string[];
+    }>(`/api/admin/audit-log${suffix}`);
+  },
   listDevices: () => jsonFetch<Device[]>("/api/devices"),
   getDevice: (id: string) => jsonFetch<Device>(`/api/devices/${encodeURIComponent(id)}`),
   rescanDevices: () => jsonFetch<Device[]>("/api/devices/rescan", { method: "POST" }),
