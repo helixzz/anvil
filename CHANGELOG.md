@@ -7,6 +7,19 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.4.1 — 2026-04-27
+
+### Added
+- **Backup and restore scripts** for PostgreSQL and configuration
+  files (`scripts/backup.sh`, `scripts/restore.sh`):
+  - `backup.sh [output-dir]` creates a timestamped tarball containing
+    a `pg_dump --clean` of the database plus a copy of `.env`,
+    `docker-compose.yml`, `mkdocs.yml`, and the `deploy/` directory.
+    Safe to run online.
+  - `restore.sh <tarball>` stops the stack, restores the database
+    from the SQL dump, and restarts the service. Requires interactive
+    confirmation before overwriting.
+
 ## 1.4.0 — 2026-04-27
 
 ### Changed
