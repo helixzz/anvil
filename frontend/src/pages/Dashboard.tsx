@@ -153,7 +153,7 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const status = useQuery({ queryKey: ["status"], queryFn: api.status });
   const fleet = useQuery({ queryKey: ["dashboard-fleet"], queryFn: api.fleetStats });
-  const runs = useQuery({ queryKey: ["runs"], queryFn: api.listRuns });
+  const runs = useQuery({ queryKey: ["runs"], queryFn: () => api.listRuns({}) });
   const board = useQuery({ queryKey: ["dashboard-leaderboards"], queryFn: () => api.leaderboards(5) });
   const degraded = useQuery({
     queryKey: ["dashboard-degraded"],
@@ -345,7 +345,7 @@ export default function Dashboard() {
         </div>
         {runs.isLoading ? (
           <div className="dim">{t("common.loading")}</div>
-        ) : !runs.data || runs.data.length === 0 ? (
+        ) : !runs.data?.items || runs.data.items.length === 0 ? (
           <div className="dim">{t("runs.noRuns")}</div>
         ) : (
           <table>
@@ -359,7 +359,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {runs.data.slice(0, 10).map((r) => (
+              {runs.data.items.slice(0, 10).map((r) => (
                 <tr key={r.id}>
                   <td>
                     <div className="mono">{r.device_model}</div>

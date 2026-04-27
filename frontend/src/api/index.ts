@@ -570,7 +570,21 @@ export const api = {
     ),
   getDeviceHistory: (id: string) =>
     jsonFetch<DeviceHistory>(`/api/devices/${encodeURIComponent(id)}/history`),
-  listRuns: () => jsonFetch<RunSummary[]>("/api/runs"),
+  listRuns: (params?: { offset?: number; limit?: number; status?: string; device_id?: string; profile_name?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.offset != null) qs.set("offset", String(params.offset));
+    if (params?.limit != null) qs.set("limit", String(params.limit));
+    if (params?.status) qs.set("status", params.status);
+    if (params?.device_id) qs.set("device_id", params.device_id);
+    if (params?.profile_name) qs.set("profile_name", params.profile_name);
+    const suffix = qs.toString() ? "?" + qs.toString() : "";
+    return jsonFetch<{
+      items: RunSummary[];
+      total: number;
+      offset: number;
+      limit: number;
+    }>(`/api/runs${suffix}`);
+  },
   listProfiles: () => jsonFetch<Profile[]>("/api/runs/profiles"),
   getRun: (id: string) => jsonFetch<Run>(`/api/runs/${id}`),
   abortRun: (id: string) =>

@@ -7,6 +7,26 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.4.0 — 2026-04-27
+
+### Changed
+- **`GET /api/runs` now supports pagination and filtering.** New
+  query parameters: `offset` (default 0), `limit` (default 50),
+  `status`, `device_id`, `profile_name`. Response shape changed from
+  a plain list to `{"items": [...], "total": N, "offset": N, "limit": N}`
+  with ISO 8601 timestamps. When all filters are omitted and
+  `offset=0`, the response is equivalent to the old list (plus
+  metadata).
+- **Runs page**: gained a status dropdown filter (queued / preflight /
+  running / complete / failed / aborted), a profile-name text filter,
+  and Previous / Next pagination controls. Row range indicator shows
+  "1–25 of 50" format.
+- **Dashboard**: `recentRuns` table updated to the new response shape.
+
+### Fixed
+- `api.listRuns`uin API client accepts optional filter/offset params;
+  the dashboard and Runs page call it correctly.
+
 ## 1.3.1 — 2026-04-27
 
 ### Added

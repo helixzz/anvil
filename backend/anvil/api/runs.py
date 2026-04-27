@@ -17,7 +17,7 @@ from anvil.orchestrator import audit, get_queue
 from anvil.profiles import get_profile, list_profiles
 from anvil.profiles.snia import RoundObservation, evaluate_steady_state
 from anvil.reports import render_run_html, render_run_json_bundle
-from anvil.schemas import MetricPoint, ProfileOut, RunCreate, RunOut, RunSummary
+from anvil.schemas import MetricPoint, ProfileOut, RunCreate, RunOut
 from anvil.shares import generate_slug
 
 router = APIRouter(prefix="/runs", tags=["runs"], dependencies=[Depends(require_bearer)])
@@ -28,34 +28,49 @@ async def profiles() -> list[ProfileOut]:
     return [ProfileOut(**p.as_dict()) for p in list_profiles()]
 
 
-@router.get("", response_model=list[RunSummary])
+@router.get("")
 async def list_runs(
-    session: AsyncSession = Depends(get_session), limit: int = 50
-) -> list[RunSummary]:
-    stmt = (
-        select(Run)
-        .options(selectinload(Run.device))
-        .order_by(Run.queued_at.desc())
-        .limit(limit)
-    )
-    result = await session.execute(stmt)
-    out: list[RunSummary] = []
-    for run in result.scalars():
+    session: AsyncSession = Depends(get_session),
+    offset: int = 0,
+    limit: int = 50,
+    status: str | None = None,
+    device_id: str | None = None,
+    profile_name: str | None = None,
+) -> dict:
+    from sqlalchemy import func as sql_func
+
+    base = select(Run).options(selectinload(Run.device))
+    if status:
+        base = base.where(Run.status == status)
+    if device_id:
+        base = base.where(Run.device_id == device_id)
+    if profile_name:
+        base = base.where(Run.profile_name == profile_name)
+
+    total = (await session.execute(
+        select(sql_func.count()).select_from(base.subquery())
+    )).scalar_one()
+
+    rows = (await session.execute(
+        base.order_by(Run.queued_at.desc()).offset(offset).limit(limit)
+    )).scalars()
+
+    items: list[dict] = []
+    for run in rows:
         device = run.device
-        out.append(
-            RunSummary(
-                id=run.id,
-                device_id=run.device_id,
-                device_model=device.model if device else "?",
-                device_serial=device.serial if device else "?",
-                profile_name=run.profile_name,
-                status=run.status,
-                queued_at=run.queued_at,
-                started_at=run.started_at,
-                finished_at=run.finished_at,
-            )
-        )
-    return out
+        items.append({
+            "id": run.id,
+            "device_id": run.device_id,
+            "device_model": device.model if device else "?",
+            "device_serial": device.serial if device else "?",
+            "profile_name": run.profile_name,
+            "status": run.status,
+            "queued_at": run.queued_at.isoformat() if run.queued_at else None,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        })
+
+    return {"items": items, "total": total, "offset": offset, "limit": limit}
 
 
 @router.post("", response_model=RunOut, status_code=status.HTTP_201_CREATED,

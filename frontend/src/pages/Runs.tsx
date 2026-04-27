@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import dayjs from "dayjs";
 import { api } from "@/api";
+
+const PAGE = 25;
 
 const badgeFor: Record<string, string> = {
   complete: "badge-ok",
@@ -13,9 +16,28 @@ const badgeFor: Record<string, string> = {
   queued: "badge-queued",
 };
 
+const STATUSES = ["queued", "preflight", "running", "complete", "failed", "aborted"];
+
 export default function Runs() {
   const { t } = useTranslation();
-  const q = useQuery({ queryKey: ["runs"], queryFn: api.listRuns, refetchInterval: 2000 });
+  const [offset, setOffset] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [profileFilter, setProfileFilter] = useState("");
+
+  const q = useQuery({
+    queryKey: ["runs", offset, statusFilter, profileFilter],
+    queryFn: () =>
+      api.listRuns({
+        offset,
+        limit: PAGE,
+        status: statusFilter || undefined,
+        profile_name: profileFilter || undefined,
+      }),
+    refetchInterval: 2000,
+  });
+
+  const items = q.data?.items ?? [];
+  const total = q.data?.total ?? 0;
 
   return (
     <div className="col" style={{ gap: 20 }}>
@@ -26,9 +48,41 @@ export default function Runs() {
         </Link>
       </div>
 
+      <div className="card">
+        <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+          <label className="col" style={{ gap: 2 }}>
+            <span className="dim" style={{ fontSize: 11 }}>
+              Status
+            </span>
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}
+              style={{ fontSize: 12 }}
+            >
+              <option value="">all</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>{t(`status_labels.${s}` as const, s)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="col" style={{ gap: 2 }}>
+            <span className="dim" style={{ fontSize: 11 }}>
+              Profile
+            </span>
+            <input
+              type="text"
+              value={profileFilter}
+              onChange={(e) => { setProfileFilter(e.target.value); setOffset(0); }}
+              placeholder="e.g. snia_quick_pts"
+              style={{ width: 160, fontSize: 12 }}
+            />
+          </label>
+        </div>
+      </div>
+
       {q.isLoading ? (
         <div className="dim">{t("common.loading")}</div>
-      ) : !q.data || q.data.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="card dim">{t("runs.noRuns")}</div>
       ) : (
         <div className="card">
@@ -45,7 +99,7 @@ export default function Runs() {
               </tr>
             </thead>
             <tbody>
-              {q.data.map((r) => (
+              {items.map((r) => (
                 <tr key={r.id}>
                   <td>
                     <div className="mono">{r.device_model}</div>
@@ -67,6 +121,24 @@ export default function Runs() {
               ))}
             </tbody>
           </table>
+
+          <div className="row" style={{ justifyContent: "space-between", marginTop: 12, fontSize: 12 }}>
+            <button
+              onClick={() => setOffset(Math.max(0, offset - PAGE))}
+              disabled={offset === 0}
+            >
+              ← Previous
+            </button>
+            <span className="dim">
+              {offset + 1}–{Math.min(offset + PAGE, total)} of {total}
+            </span>
+            <button
+              onClick={() => setOffset(offset + PAGE)}
+              disabled={offset + PAGE >= total}
+            >
+              Next →
+            </button>
+          </div>
         </div>
       )}
     </div>
