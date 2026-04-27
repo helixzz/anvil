@@ -7,6 +7,15 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.4.2 — 2026-04-27
+
+### Added
+- 12 new unit tests for fio helper functions (`test_fio_helpers.py`):
+  `_safe_float`, `_safe_int`, `_nested_float`, `_summarise`,
+  `_snapshot_to_sample`, `_parse_last_json_object`. Covers numeric
+  parsing, nested-value extraction, fio result summary generation,
+  snapshot-to-sample mapping, and JSON extraction from fio log output.
+
 ## 1.4.1 — 2026-04-27
 
 ### Added
