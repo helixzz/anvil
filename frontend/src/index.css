@@ -297,3 +297,34 @@ a { color: var(--accent); }
   font-size: 12px;
   line-height: 1.45;
 }
+
+/* Light theme overrides */
+[data-theme=light] {
+  --bg: #ffffff;
+  --bg-elev: #f4f5f7;
+  --bg-elev-2: #e7e9ec;
+  --border: #d1d5db;
+  --fg: #1e293b;
+  --fg-dim: #6b7280;
+  --accent: #d97706;
+  --accent-strong: #b45309;
+  color-scheme: light;
+}
+
+/* Sidebar navigation groups */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 16px;
+}
+
+.nav-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--fg-dim);
+  padding: 0 8px;
+  margin-bottom: 4px;
+}

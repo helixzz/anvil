@@ -189,6 +189,20 @@ export default function App() {
     return !!getToken();
   });
 
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    const stored = localStorage.getItem("anvil-theme");
+    return stored === "light" ? "light" : "dark";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("anvil-theme", theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
+  }
+
   useEffect(() => {
     const handler = () => setAuthenticated(false);
     window.addEventListener("anvil:auth-required", handler);
@@ -225,18 +239,35 @@ export default function App() {
         <h1>
           <span style={{ color: "var(--accent)" }}>■</span> {t("app.name")}
         </h1>
-        <NavLink to="/" end>
-          {t("nav.dashboard")}
-        </NavLink>
-        <NavLink to="/devices">{t("nav.devices")}</NavLink>
-        <NavLink to="/runs">{t("nav.runs")}</NavLink>
-        <NavLink to="/models">{t("nav.models")}</NavLink>
-        <NavLink to="/compare">{t("nav.compare")}</NavLink>
-        <NavLink to="/system">{t("nav.system")}</NavLink>
-        {isAdmin && <NavLink to="/admin/users">{t("nav.users")}</NavLink>}
-        {isAdmin && <NavLink to="/admin/sso">{t("nav.sso")}</NavLink>}
-        {isAdmin && <NavLink to="/admin/audit-log">Audit log</NavLink>}
-        <NavLink to="/runs/new">{t("nav.newRun")}</NavLink>
+
+        <div className="nav-group">
+          <div className="nav-group-label">Monitor</div>
+          <NavLink to="/" end>{t("nav.dashboard")}</NavLink>
+          <NavLink to="/system">{t("nav.system")}</NavLink>
+          {isAdmin && <NavLink to="/admin/audit-log">Audit log</NavLink>}
+        </div>
+
+        <div className="nav-group">
+          <div className="nav-group-label">Inventory</div>
+          <NavLink to="/devices">{t("nav.devices")}</NavLink>
+          <NavLink to="/models">{t("nav.models")}</NavLink>
+        </div>
+
+        <div className="nav-group">
+          <div className="nav-group-label">Benchmark</div>
+          <NavLink to="/runs">{t("nav.runs")}</NavLink>
+          <NavLink to="/runs/new">{t("nav.newRun")}</NavLink>
+          <NavLink to="/compare">{t("nav.compare")}</NavLink>
+        </div>
+
+        {isAdmin && (
+          <div className="nav-group">
+            <div className="nav-group-label">Access</div>
+            <NavLink to="/admin/users">{t("nav.users")}</NavLink>
+            <NavLink to="/admin/sso">{t("nav.sso")}</NavLink>
+          </div>
+        )}
+
         <div style={{ marginTop: "auto", paddingTop: 16 }} className="col">
           <div className="dim" style={{ fontSize: 12 }}>
             {t("status.version")}:&nbsp;
@@ -273,7 +304,12 @@ export default function App() {
           {statusQuery.data?.simulation_mode && (
             <div className="badge badge-warn">{t("status.simulation")}</div>
           )}
-          <LanguageSwitcher />
+          <div className="row" style={{ gap: 4, alignItems: "center" }}>
+            <LanguageSwitcher />
+            <button onClick={toggleTheme} title="Toggle dark/light theme" style={{ fontSize: 13, padding: "4px 8px" }}>
+              {theme === "dark" ? "☀" : "☾"}
+            </button>
+          </div>
           <button onClick={signOut}>{t("common.signOut")}</button>
         </div>
       </aside>

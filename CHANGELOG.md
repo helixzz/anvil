@@ -7,6 +7,17 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.4.3 — 2026-04-27
+
+### Changed
+- **Sidebar menu restructured into functional groups:** Monitor
+  (Dashboard, System, Audit Log), Inventory (Devices, Models),
+  Benchmark (Runs, New Run, Compare), and Access (Users, SSO) for
+  admin. Items are no longer listed in a flat unsorted stack.
+- **Dark/light theme toggle** added to the sidebar. Light theme uses
+  a soft gray/white palette; dark theme (default) retains the
+  existing deep-blue branding. Preference persists in localStorage.
+
 ## 1.4.2 — 2026-04-27
 
 ### Added
