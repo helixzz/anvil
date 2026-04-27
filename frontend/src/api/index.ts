@@ -591,6 +591,11 @@ export const api = {
     jsonFetch<{ run_id: string; result: string }>(`/api/runs/${id}/abort`, {
       method: "POST",
     }),
+  batchDeleteRuns: (runIds: string[]) =>
+    jsonFetch<{ deleted: number; requested: number }>(`/api/runs/batch`, {
+      method: "DELETE",
+      body: JSON.stringify({ run_ids: runIds }),
+    }),
   getRunTimeseries: (id: string, metric?: string) => {
     const qs = metric ? `?metric=${encodeURIComponent(metric)}` : "";
     return jsonFetch<MetricPoint[]>(`/api/runs/${id}/timeseries${qs}`);

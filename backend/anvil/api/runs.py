@@ -7,12 +7,13 @@ import re
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from anvil.api import require_bearer
-from anvil.auth import Principal, require_operator, resolve_principal
+from anvil.auth import Principal, require_admin, require_operator, resolve_principal
 from anvil.db import get_session
 from anvil.models import Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.orchestrator import audit, get_queue
@@ -596,3 +597,21 @@ async def revoke_run_share(
     run.share_slug = None
     await session.commit()
     return {"run_id": run.id, "share_slug": None}
+
+
+class BatchDeleteRequest(BaseModel):
+    run_ids: list[str] = Field(min_length=1, max_length=200)
+
+
+@router.delete("/batch", dependencies=[Depends(require_admin)])
+async def batch_delete_runs(
+    body: BatchDeleteRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
+    stmt = select(Run).where(Run.id.in_(body.run_ids))
+    rows = (await session.execute(stmt)).scalars().all()
+    deleted = 0
+    for row in rows:
+        await session.delete(row)
+        deleted += 1
+    await session.commit()
+    return {"deleted": deleted, "requested": len(body.run_ids)}

@@ -7,6 +7,17 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.4.5 — 2026-04-27
+
+### Added
+- **Batch delete** for runs (`DELETE /api/runs/batch`, admin only).
+  Accepts `{run_ids: […]}` (1–200 IDs) and returns deleted/requested
+  counts.
+- **Checkbox selection** on the Runs page: check rows individually,
+  select-all header checkbox, and a "Delete N" button that appears
+  when any rows are selected. Selection resets on pagination or filter
+  changes.
+
 ## 1.4.4 — 2026-04-27
 
 ### Added

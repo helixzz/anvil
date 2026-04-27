@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import dayjs from "dayjs";
+
 import { api } from "@/api";
 
 const PAGE = 25;
@@ -20,9 +21,11 @@ const STATUSES = ["queued", "preflight", "running", "complete", "failed", "abort
 
 export default function Runs() {
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const [offset, setOffset] = useState(0);
   const [statusFilter, setStatusFilter] = useState("");
   const [profileFilter, setProfileFilter] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const q = useQuery({
     queryKey: ["runs", offset, statusFilter, profileFilter],
@@ -36,8 +39,32 @@ export default function Runs() {
     refetchInterval: 2000,
   });
 
+  const delMut = useMutation({
+    mutationFn: (ids: string[]) => api.batchDeleteRuns(ids),
+    onSuccess: () => {
+      setSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+
   const items = q.data?.items ?? [];
   const total = q.data?.total ?? 0;
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAll() {
+    if (selected.size === items.length) setSelected(new Set());
+    else setSelected(new Set(items.map((r) => r.id)));
+  }
+
+  function prevPage() { setOffset(Math.max(0, offset - PAGE)); setSelected(new Set()); }
+  function nextPage() { setOffset(offset + PAGE); setSelected(new Set()); }
 
   return (
     <div className="col" style={{ gap: 20 }}>
@@ -51,12 +78,10 @@ export default function Runs() {
       <div className="card">
         <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "end" }}>
           <label className="col" style={{ gap: 2 }}>
-            <span className="dim" style={{ fontSize: 11 }}>
-              Status
-            </span>
+            <span className="dim" style={{ fontSize: 11 }}>Status</span>
             <select
               value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}
+              onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); setSelected(new Set()); }}
               style={{ fontSize: 12 }}
             >
               <option value="">all</option>
@@ -66,17 +91,28 @@ export default function Runs() {
             </select>
           </label>
           <label className="col" style={{ gap: 2 }}>
-            <span className="dim" style={{ fontSize: 11 }}>
-              Profile
-            </span>
+            <span className="dim" style={{ fontSize: 11 }}>Profile</span>
             <input
               type="text"
               value={profileFilter}
-              onChange={(e) => { setProfileFilter(e.target.value); setOffset(0); }}
+              onChange={(e) => { setProfileFilter(e.target.value); setOffset(0); setSelected(new Set()); }}
               placeholder="e.g. snia_quick_pts"
               style={{ width: 160, fontSize: 12 }}
             />
           </label>
+          {selected.size > 0 && (
+            <button
+              className="btn-danger"
+              onClick={() => {
+                const ids = Array.from(selected);
+                if (window.confirm(`Delete ${ids.length} run(s)?`)) delMut.mutate(ids);
+              }}
+              disabled={delMut.isPending}
+              style={{ fontSize: 12 }}
+            >
+              {delMut.isPending ? "…" : `Delete ${selected.size}`}
+            </button>
+          )}
         </div>
       </div>
 
@@ -89,6 +125,9 @@ export default function Runs() {
           <table>
             <thead>
               <tr>
+                <th style={{ width: 30 }}>
+                  <input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={selectAll} />
+                </th>
                 <th>{t("runs.device")}</th>
                 <th>{t("runs.profile")}</th>
                 <th>{t("runs.status")}</th>
@@ -101,6 +140,9 @@ export default function Runs() {
             <tbody>
               {items.map((r) => (
                 <tr key={r.id}>
+                  <td>
+                    <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} />
+                  </td>
                   <td>
                     <div className="mono">{r.device_model}</div>
                     <div className="dim mono" style={{ fontSize: 11 }}>{r.device_serial}</div>
@@ -123,19 +165,13 @@ export default function Runs() {
           </table>
 
           <div className="row" style={{ justifyContent: "space-between", marginTop: 12, fontSize: 12 }}>
-            <button
-              onClick={() => setOffset(Math.max(0, offset - PAGE))}
-              disabled={offset === 0}
-            >
+            <button onClick={prevPage} disabled={offset === 0}>
               ← Previous
             </button>
             <span className="dim">
               {offset + 1}–{Math.min(offset + PAGE, total)} of {total}
             </span>
-            <button
-              onClick={() => setOffset(offset + PAGE)}
-              disabled={offset + PAGE >= total}
-            >
+            <button onClick={nextPage} disabled={offset + PAGE >= total}>
               Next →
             </button>
           </div>
