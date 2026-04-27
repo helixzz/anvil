@@ -7,6 +7,16 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.4.4 — 2026-04-27
+
+### Added
+- **CSV export** for runs (`GET /api/runs/{id}/export.csv`). Returns
+  a wide CSV with a metadata header row (run ID, profile, status,
+  device model/serial) followed by one row per phase with all numeric
+  metrics. Excel-compatible: UTF-8 BOM + CRLF line endings.
+- **"Export CSV" button** on RunDetail page alongside HTML and JSON
+  exports. i18n keys for en/zh.
+
 ## 1.4.3 — 2026-04-27
 
 ### Changed

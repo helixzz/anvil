@@ -278,6 +278,13 @@ export default function RunDetail() {
             >
               <button>{t("runs.exportJson")}</button>
             </a>
+            <a
+              href={`/api/runs/${encodeURIComponent(run.id)}/export.csv?token=${encodeURIComponent(getToken() ?? "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <button>{t("runs.exportCsv")}</button>
+            </a>
             <ShareButton runId={run.id} />
           </div>
         </div>

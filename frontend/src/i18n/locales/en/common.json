@@ -112,6 +112,7 @@
     "abortConfirm": "Abort this run? Any running fio process will receive SIGTERM. The run will be marked aborted.",
     "exportHtml": "Export HTML",
     "exportJson": "Export JSON",
+    "exportCsv": "Export CSV",
     "shareCreate": "Create share link",
     "shareHelp": "Generate a public URL that anyone can open (serial redacted).",
     "shareCopy": "Copy link",

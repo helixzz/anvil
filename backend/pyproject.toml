@@ -1,6 +1,6 @@
 [project]
 name = "anvil-backend"
-version = "1.4.3"
+version = "1.4.4"
 description = "Anvil — NVMe Validator & IOps Lab, FastAPI backend"
 requires-python = ">=3.11"
 license = { text = "MIT" }

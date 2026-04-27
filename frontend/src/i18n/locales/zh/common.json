@@ -112,6 +112,7 @@
     "abortConfirm": "确认中止此次运行？正在运行的 fio 进程会收到 SIGTERM，运行状态将被标记为“已中止”。",
     "exportHtml": "导出 HTML",
     "exportJson": "导出 JSON",
+    "exportCsv": "导出 CSV",
     "shareCreate": "创建分享链接",
     "shareHelp": "生成公开 URL，任何人都可打开（序列号已脱敏）。",
     "shareCopy": "复制链接",

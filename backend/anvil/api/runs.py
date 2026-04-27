@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import re
 
 import ulid
@@ -501,6 +503,59 @@ async def export_run_json(
         media_type="application/json",
         headers={
             "Content-Disposition": f'attachment; filename="anvil-run-{run_id}.json"',
+        },
+    )
+
+
+@router.get("/{run_id}/export.csv")
+async def export_run_csv(
+    run_id: str, session: AsyncSession = Depends(get_session)
+) -> Response:
+    """CSV export: one row per phase, all metrics as columns.
+
+    The first row contains run-level metadata (id, profile, status,
+    device model/serial, timestamps); subsequent rows are per-phase
+    metrics. Excel-compatible: starts with UTF-8 BOM (\\ufeff) and
+    uses CRLF line endings.
+    """
+    run_dict, phases, _timeseries, device = await _assemble_export(run_id, session)
+
+    fields = [
+        "phase_order", "phase_name", "pattern", "block_size", "iodepth",
+        "numjobs", "rwmix_write_pct", "runtime_s",
+        "read_iops", "write_iops",
+        "read_bw_bytes", "write_bw_bytes",
+        "read_clat_mean_ns", "read_clat_p99_ns", "read_clat_p9999_ns",
+        "write_clat_mean_ns", "write_clat_p99_ns",
+    ]
+
+    buf = io.StringIO(newline="")
+    buf.write("\ufeff")
+    writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore", lineterminator="\r\n")
+
+    meta = {
+        "phase_order": "run_id",
+        "phase_name": run_dict.get("id", ""),
+        "pattern": run_dict.get("profile_name", ""),
+        "block_size": run_dict.get("status", ""),
+        "iodepth": run_dict.get("started_at", "") or "",
+        "numjobs": run_dict.get("finished_at", "") or "",
+    }
+    if device:
+        meta["rwmix_write_pct"] = device.get("model", "")
+        meta["runtime_s"] = device.get("serial", "")
+
+    writer.writerow(meta)
+    writer.writeheader()
+    for p in phases:
+        row = {k: p.get(k, "") for k in fields}
+        writer.writerow(row)
+
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="anvil-run-{run_id}.csv"',
         },
     )
 
