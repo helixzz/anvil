@@ -18,6 +18,7 @@ import Users from "@/pages/Users";
 import Sso from "@/pages/Sso";
 import AuditLog from "@/pages/AuditLog";
 import Schedules from "@/pages/Schedules";
+import Inventory from "@/pages/Inventory";
 
 function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -250,8 +251,9 @@ export default function App() {
 
         <div className="nav-group">
           <div className="nav-group-label">Inventory</div>
-          <NavLink to="/devices">{t("nav.devices")}</NavLink>
-          <NavLink to="/models">{t("nav.models")}</NavLink>
+            <NavLink to="/devices">{t("nav.devices")}</NavLink>
+            <NavLink to="/models">{t("nav.models")}</NavLink>
+            <NavLink to="/inventory">Inventory</NavLink>
         </div>
 
         <div className="nav-group">
@@ -327,6 +329,7 @@ export default function App() {
           <Route path="/models/:slug" element={<ModelDetail />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/system" element={<System />} />
+          <Route path="/inventory" element={<Inventory />} />
           {isAdmin && <Route path="/admin/users" element={<Users />} /> }
           {isAdmin && <Route path="/admin/sso" element={<Sso />} /> }
           {isAdmin && <Route path="/admin/audit-log" element={<AuditLog />} /> }
