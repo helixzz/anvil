@@ -3,7 +3,7 @@
 [![CI](https://github.com/helixzz/anvil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/helixzz/anvil/actions/workflows/ci.yml)
 [![Release](https://github.com/helixzz/anvil/actions/workflows/release.yml/badge.svg)](https://github.com/helixzz/anvil/actions/workflows/release.yml)
 [![Docs](https://github.com/helixzz/anvil/actions/workflows/docs.yml/badge.svg)](https://helixzz.github.io/anvil/)
-![version](https://img.shields.io/badge/version-1.4.5-orange)
+![version](https://img.shields.io/badge/version-1.4.6-orange)
 
 📚 **Full documentation**: <https://helixzz.github.io/anvil/>
 

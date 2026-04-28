@@ -17,6 +17,7 @@ import System from "@/pages/System";
 import Users from "@/pages/Users";
 import Sso from "@/pages/Sso";
 import AuditLog from "@/pages/AuditLog";
+import Schedules from "@/pages/Schedules";
 
 function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -265,6 +266,7 @@ export default function App() {
             <div className="nav-group-label">Access</div>
             <NavLink to="/admin/users">{t("nav.users")}</NavLink>
             <NavLink to="/admin/sso">{t("nav.sso")}</NavLink>
+            <NavLink to="/admin/schedules">Schedules</NavLink>
           </div>
         )}
 
@@ -328,6 +330,7 @@ export default function App() {
           {isAdmin && <Route path="/admin/users" element={<Users />} /> }
           {isAdmin && <Route path="/admin/sso" element={<Sso />} /> }
           {isAdmin && <Route path="/admin/audit-log" element={<AuditLog />} /> }
+          {isAdmin && <Route path="/admin/schedules" element={<Schedules />} /> }
           <Route
             path="*"
             element={

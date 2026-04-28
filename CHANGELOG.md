@@ -7,6 +7,31 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.4.6 — 2026-04-27
+
+### Added
+- **Scheduled / periodic benchmarks.** New `schedules` table
+  (migration `20260427_0007`) stores admin-configured recurring runs
+  with device, profile, interval (hours), and enabled flag.
+  - `GET/POST /api/schedules`, `GET/PUT/DELETE /api/schedules/{id}`
+    (admin only).
+  - `JobQueue._scheduler_loop` checks every 60s for due schedules
+    and creates + queues the run automatically, then advances
+    `next_run_at` by `interval_hours`. Queued runs respect
+    single-run serialization; a schedule that fires while another
+    run is in progress waits behind it.
+  - Frontend page at `/admin/schedules` with create/edit/delete
+    form, device picker, profile dropdown, interval selector
+    (1h/6h/daily/weekly/monthly), and enabled toggle.
+
+### Changed
+- `JobQueue` gains `_scheduler` task and `start/stop` manages it
+  alongside the worker.
+
+### Migrations
+- **`20260427_0007_schedules`** — new `schedules` table with FK
+  to devices and users.
+
 ## 1.4.5 — 2026-04-27
 
 ### Added

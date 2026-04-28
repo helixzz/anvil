@@ -1,6 +1,6 @@
 {
   "name": "anvil-web",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "Anvil — NVMe Validator & IOps Lab, web frontend",
   "private": true,
   "type": "module",

@@ -260,3 +260,27 @@ class TuneReceipt(Base):
     created_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+
+
+class Schedule(Base):
+    __tablename__ = "schedules"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    profile_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    interval_hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(_tz_datetime)
+    next_run_at: Mapped[datetime | None] = mapped_column(_tz_datetime, index=True)
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        _tz_datetime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    device: Mapped[Device] = relationship()

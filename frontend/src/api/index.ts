@@ -669,6 +669,16 @@ export const api = {
       `/api/runs/${encodeURIComponent(id)}/share`,
       { method: "DELETE" },
     ),
+  listSchedules: () =>
+    jsonFetch<
+      { id: string; name: string; device_id: string; profile_name: string; enabled: boolean; interval_hours: number; last_run_at: string | null; next_run_at: string | null }[]
+    >("/api/schedules"),
+  createSchedule: (body: { name: string; device_id: string; profile_name: string; interval_hours: number; enabled: boolean }) =>
+    jsonFetch("/api/schedules", { method: "POST", body: JSON.stringify(body) }),
+  updateSchedule: (id: string, body: { name: string; device_id: string; profile_name: string; interval_hours: number; enabled: boolean }) =>
+    jsonFetch(`/api/schedules/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteSchedule: (id: string) =>
+    jsonFetch(`/api/schedules/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 export function wsUrl(path: string): string {

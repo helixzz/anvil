@@ -20,6 +20,7 @@ from anvil.api.environment import router as environment_router
 from anvil.api.models import router as models_router
 from anvil.api.public import router as public_router
 from anvil.api.runs import router as runs_router
+from anvil.api.schedules import router as schedules_router
 from anvil.api.ws import router as ws_router
 from anvil.auth import hash_password
 from anvil.config import get_settings
@@ -148,6 +149,7 @@ app.include_router(models_router, prefix="/api")
 app.include_router(environment_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(comparisons_router, prefix="/api")
+app.include_router(schedules_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(public_router)
 app.include_router(ws_router)

@@ -23,6 +23,7 @@ class JobQueue:
     def __init__(self) -> None:
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
+        self._scheduler: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._running_run_id: str | None = None
         self._running_task: asyncio.Task[None] | None = None
@@ -31,10 +32,14 @@ class JobQueue:
     def start(self) -> None:
         if self._worker is None or self._worker.done():
             self._worker = asyncio.create_task(self._run_forever(), name="anvil-job-queue")
+        if self._scheduler is None or self._scheduler.done():
+            self._scheduler = asyncio.create_task(self._scheduler_loop(), name="anvil-scheduler")
 
     def stop(self) -> None:
         if self._worker is not None:
             self._worker.cancel()
+        if self._scheduler is not None:
+            self._scheduler.cancel()
 
     async def submit(self, run_id: str) -> None:
         await self._queue.put(run_id)
@@ -83,6 +88,46 @@ class JobQueue:
                     self._running_run_id = None
                     self._running_task = None
                     self._abort_requests.discard(run_id)
+
+    async def _scheduler_loop(self) -> None:
+        from datetime import timedelta
+
+        from anvil.models import Schedule
+        while True:
+            try:
+                await asyncio.sleep(60)
+                async with session_scope() as session:
+                    now = datetime.now(UTC)
+                    due = (await session.execute(
+                        select(Schedule).where(
+                            Schedule.enabled.is_(True),
+                            Schedule.next_run_at.isnot(None),
+                            Schedule.next_run_at <= now,
+                        )
+                    )).scalars().all()
+                    for sched in due:
+                        try:
+                            run_id = str(ulid.ULID())
+                            session.add(Run(
+                                id=run_id,
+                                device_id=sched.device_id,
+                                profile_name=sched.profile_name,
+                                profile_snapshot={},
+                                status=RunStatus.QUEUED.value,
+                                device_path_at_run="/dev/auto-scheduled",
+                            ))
+                            await session.flush()
+                            await self.submit(run_id)
+                            sched.last_run_at = now
+                            sched.next_run_at = now + timedelta(hours=sched.interval_hours)
+                            log.info("schedule_triggered", schedule_id=sched.id, run_id=run_id)
+                        except Exception as exc:
+                            log.error("schedule_run_failed", schedule_id=sched.id, error=str(exc))
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.error("scheduler_loop_error", error=str(exc), exc_info=True)
+                await asyncio.sleep(60)
 
 
 _queue_instance: JobQueue | None = None
