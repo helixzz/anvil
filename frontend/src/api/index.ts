@@ -618,6 +618,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  batchCreateRuns: (body: {
+    device_ids: string[];
+    profile_names: string[];
+    confirm_serial?: Record<string, string>;
+  }) =>
+    jsonFetch<{ created: number; run_ids: string[]; skipped: { device_id: string; profile_name: string; reason: string }[] }>(
+      "/api/runs/batch",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   listModels: () => jsonFetch<ModelIndexEntry[]>("/api/models"),
   getModel: (slug: string) => jsonFetch<ModelDetail>(`/api/models/${encodeURIComponent(slug)}`),
   compareModelPhase: (slug: string, phase_name: string) =>

@@ -134,6 +134,77 @@ async def create_run(
     return run
 
 
+class BatchRunRequest(BaseModel):
+    device_ids: list[str] = Field(min_length=1, max_length=50)
+    profile_names: list[str] = Field(min_length=1, max_length=10)
+    confirm_serial: dict[str, str] = Field(default_factory=dict)
+
+
+@router.post("/batch", dependencies=[Depends(require_operator)])
+async def batch_create_runs(
+    payload: BatchRunRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Create runs for every device × profile combination.
+
+    Returns the list of created run IDs plus a `skipped` list for any
+    combination that was rejected (device not testable, unknown profile,
+    missing serial confirmation for destructive profile).
+    """
+    created: list[str] = []
+    skipped: list[dict] = []
+
+    for device_id in payload.device_ids:
+        device = await session.get(Device, device_id)
+        if device is None:
+            for pn in payload.profile_names:
+                skipped.append({"device_id": device_id, "profile_name": pn, "reason": "device not found"})
+            continue
+        if not device.is_testable:
+            for pn in payload.profile_names:
+                skipped.append({"device_id": device_id, "profile_name": pn, "reason": device.exclusion_reason or "not testable"})
+            continue
+        if not device.current_device_path:
+            for pn in payload.profile_names:
+                skipped.append({"device_id": device_id, "profile_name": pn, "reason": "no current device path"})
+            continue
+
+        for profile_name in payload.profile_names:
+            profile = get_profile(profile_name)
+            if profile is None:
+                skipped.append({"device_id": device_id, "profile_name": profile_name, "reason": "unknown profile"})
+                continue
+
+            if profile.destructive:
+                supplied = (payload.confirm_serial.get(device_id, "")).strip().lower()
+                expected = device.serial.strip().lower()[-6:]
+                if not expected or supplied != expected:
+                    skipped.append({"device_id": device_id, "profile_name": profile_name, "reason": "destructive: serial confirmation required"})
+                    continue
+
+            run = Run(
+                id=str(ulid.ULID()),
+                device_id=device.id,
+                profile_name=profile.name,
+                profile_snapshot=profile.as_dict(),
+                status=RunStatus.QUEUED.value,
+                device_path_at_run=device.current_device_path,
+            )
+            session.add(run)
+            await session.flush()
+            created.append(run.id)
+            await get_queue().submit(run.id)
+            await audit(
+                actor="api",
+                action="run_queued",
+                target=run.id,
+                details={"device_id": device.id, "profile": profile.name, "batch": True},
+            )
+
+    await session.commit()
+    return {"created": len(created), "run_ids": created, "skipped": skipped}
+
+
 @router.post("/{run_id}/abort", dependencies=[Depends(require_operator)])
 async def abort_run(
     run_id: str, session: AsyncSession = Depends(get_session)
