@@ -191,17 +191,19 @@ async def batch_create_runs(
                 device_path_at_run=device.current_device_path,
             )
             session.add(run)
-            await session.flush()
             created.append(run.id)
-            await get_queue().submit(run.id)
-            await audit(
-                actor="api",
-                action="run_queued",
-                target=run.id,
-                details={"device_id": device.id, "profile": profile.name, "batch": True},
-            )
 
     await session.commit()
+
+    for run_id in created:
+        await get_queue().submit(run_id)
+        await audit(
+            actor="api",
+            action="run_queued",
+            target=run_id,
+            details={"batch": True},
+        )
+
     return {"created": len(created), "run_ids": created, "skipped": skipped}
 
 
