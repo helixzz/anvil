@@ -5,8 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import { api, type Device } from "@/api";
 import { formatDuration, humanBytes } from "@/lib/format";
-
-type DestructiveSerialMap = Record<string, string>;
+import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
 
 export default function NewRun() {
   const { t } = useTranslation();
@@ -15,45 +14,34 @@ export default function NewRun() {
   const profilesQ = useQuery({ queryKey: ["profiles"], queryFn: api.listProfiles });
 
   const [deviceIds, setDeviceIds] = useState<Set<string>>(new Set());
-  const [profileNames, setProfileNames] = useState<Set<string>>(new Set("quick"));
-  const [serialMap, setSerialMap] = useState<DestructiveSerialMap>({});
+  const [profileNames, setProfileNames] = useState<Set<string>>(new Set());
+  const [serialMap, setSerialMap] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const create = useMutation({
     mutationFn: api.batchCreateRuns,
-    onSuccess: (result) => {
-      navigate(`/runs?batch=${result.run_ids.length}`)
-    },
+    onSuccess: () => navigate("/runs"),
     onError: (err: Error) => setError(err.message),
   });
 
   const testable: Device[] = (devicesQ.data ?? []).filter((d) => d.is_testable);
   const profiles = profilesQ.data ?? [];
 
-  function toggleDevice(id: string) {
-    setDeviceIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        setSerialMap((m) => { const n = { ...m }; delete n[id]; return n; });
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
+  const deviceOptions: MultiSelectOption[] = testable.map((d) => ({
+    value: d.id,
+    label: `${d.model} · ${d.serial}`,
+    sub: `${humanBytes(d.capacity_bytes)} · ${d.current_device_path || "—"}`,
+  }));
 
-  function toggleProfile(name: string) {
-    setProfileNames((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  }
+  const profileOptions: MultiSelectOption[] = profiles.map((p) => ({
+    value: p.name,
+    label: `${p.title} ${p.destructive ? "⚠" : ""}`,
+    sub: `${formatDuration(p.estimated_duration_seconds)} · ${p.phases.length} phases`,
+  }));
 
   const selectedDevices = testable.filter((d) => deviceIds.has(d.id));
-  const destructiveProfiles = profiles.filter((p) => profileNames.has(p.name) && p.destructive);
+  const selectedProfiles = profiles.filter((p) => profileNames.has(p.name));
+  const destructiveProfiles = selectedProfiles.filter((p) => p.destructive);
   const needsSerial = selectedDevices.length > 0 && destructiveProfiles.length > 0;
   const comboCount = deviceIds.size * profileNames.size;
 
@@ -79,59 +67,101 @@ export default function NewRun() {
   return (
     <div className="col" style={{ gap: 20 }}>
       <div className="topbar">
-        <h2>Batch new runs</h2>
+        <h2>{t("newRun.title")}</h2>
         <div className="dim" style={{ fontSize: 12 }}>
-          {comboCount > 0 ? `${deviceIds.size} device(s) × ${profileNames.size} profile(s) = ${comboCount} run(s)` : "Select devices and profiles"}
+          {comboCount > 0
+            ? `${deviceIds.size}d × ${profileNames.size}p = ${comboCount} run(s)`
+            : "Select device(s) and profile(s) below"}
         </div>
       </div>
 
       {testable.length === 0 ? (
         <div className="card dim">{t("newRun.noTestable")}</div>
       ) : (
-        <div className="col" style={{ gap: 20 }}>
+        <div className="col" style={{ gap: 16 }}>
           <div className="card">
-            <h4 style={{ margin: "0 0 8px 0" }}>Devices</h4>
-            <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
-              {testable.map((d) => (
-                <button
-                  key={d.id}
-                  onClick={() => toggleDevice(d.id)}
-                  className={deviceIds.has(d.id) ? "btn-primary" : ""}
-                  style={{ fontSize: 12 }}
-                >
-                  {d.model} · {d.serial} · {humanBytes(d.capacity_bytes)}
-                </button>
-              ))}
+            <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
+              {t("newRun.pickDevice")}
             </div>
+            <MultiSelect
+              options={deviceOptions}
+              selected={deviceIds}
+              onChange={setDeviceIds}
+              placeholder="Pick device(s)…"
+            />
           </div>
 
           <div className="card">
-            <h4 style={{ margin: "0 0 8px 0" }}>Profiles</h4>
-            <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
-              {profiles.map((p) => (
-                <button
-                  key={p.name}
-                  onClick={() => toggleProfile(p.name)}
-                  className={profileNames.has(p.name) ? "btn-primary" : ""}
-                  style={{ fontSize: 12 }}
-                  title={p.description}
-                >
-                  {p.title} {p.destructive ? "⚠" : ""} · {formatDuration(p.estimated_duration_seconds)}
-                </button>
+            <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
+              {t("newRun.pickProfile")}
+            </div>
+            <MultiSelect
+              options={profileOptions}
+              selected={profileNames}
+              onChange={setProfileNames}
+              placeholder="Pick profile(s)…"
+              disabled={profilesQ.isLoading}
+            />
+          </div>
+
+          {selectedProfiles.length > 0 && (
+            <div className="card" style={{ background: "var(--bg-elev-2)" }}>
+              {selectedProfiles.map((p) => (
+                <div key={p.name} style={{ marginBottom: 16 }}>
+                  <h3 style={{ margin: "0 0 4px 0" }}>
+                    {p.title}{" "}
+                    {p.destructive && (
+                      <span className="badge badge-err" style={{ fontSize: 10 }}>
+                        destructive
+                      </span>
+                    )}
+                  </h3>
+                  <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
+                    {p.description}
+                  </div>
+                  <div style={{ fontSize: 12, marginBottom: 6 }}>
+                    {t("newRun.estimatedDuration")}:{" "}
+                    <span className="mono">{formatDuration(p.estimated_duration_seconds)}</span>{" "}
+                    · <span className="mono">{p.phases.length} phases</span>
+                  </div>
+                  {selectedProfiles.length <= 2 && (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Phase</th><th>Pattern</th><th>BS</th><th>QD</th><th>Jobs</th><th>Runtime</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {p.phases.map((ph) => (
+                          <tr key={ph.name}>
+                            <td className="mono" style={{ fontSize: 11 }}>{ph.name}</td>
+                            <td style={{ fontSize: 12 }}>{ph.pattern}</td>
+                            <td style={{ fontSize: 12 }}>{humanBytes(ph.block_size)}</td>
+                            <td style={{ fontSize: 12 }}>{ph.iodepth}</td>
+                            <td style={{ fontSize: 12 }}>{ph.numjobs}</td>
+                            <td style={{ fontSize: 12 }}>{ph.runtime_s}s</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               ))}
             </div>
-          </div>
+          )}
 
           {needsSerial && (
             <div className="card" style={{ background: "#3b1820", border: "1px solid #7f1d1d" }}>
-              <div style={{ marginBottom: 12 }}>
-                Destructive profile(s) selected: {destructiveProfiles.map((p) => p.title).join(", ")}.
+              <div style={{ marginBottom: 12, fontSize: 13 }}>
+                Destructive profile(s): {destructiveProfiles.map((p) => p.title).join(", ")}.
                 Enter the last 6 characters of each device serial:
               </div>
-              <div className="col" style={{ gap: 8 }}>
+              <div className="col" style={{ gap: 6 }}>
                 {selectedDevices.map((d) => (
                   <div key={d.id} className="row" style={{ alignItems: "center", gap: 8 }}>
-                    <span className="mono" style={{ fontSize: 12, minWidth: 180 }}>{d.model} · {d.serial}</span>
+                    <span className="mono" style={{ fontSize: 12, minWidth: 200 }}>
+                      {d.model} · {d.serial}
+                    </span>
                     <input
                       value={serialMap[d.id] || ""}
                       onChange={(e) => setSerialMap((m) => ({ ...m, [d.id]: e.target.value }))}
@@ -153,7 +183,11 @@ export default function NewRun() {
               disabled={deviceIds.size === 0 || profileNames.size === 0 || create.isPending}
               onClick={submit}
             >
-              {create.isPending ? t("common.loading") : `Launch ${comboCount} run(s)`}
+              {create.isPending
+                ? t("common.loading")
+                : comboCount > 0
+                  ? `Launch ${comboCount} run(s)`
+                  : t("newRun.launch")}
             </button>
             <button onClick={() => navigate(-1)}>{t("common.cancel")}</button>
           </div>
