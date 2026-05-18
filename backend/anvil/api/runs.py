@@ -145,7 +145,7 @@ async def batch_create_runs(
     payload: BatchRunRequest,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Create runs for every device × profile combination.
+    """Create runs for every device x profile combination.
 
     Returns the list of created run IDs plus a `skipped` list for any
     combination that was rejected (device not testable, unknown profile,
