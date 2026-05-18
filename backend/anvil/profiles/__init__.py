@@ -352,6 +352,180 @@ ENDURANCE_SOAK_PROFILE = Profile(
 )
 
 
+def _help_phase(
+    name: str, pattern: str, bs: int, qd: int, nj: int = 1,
+    rwmix: int = 0, runtime_s: int = 60, ro: bool = False,
+) -> PhaseSpec:
+    return PhaseSpec(
+        name=name, pattern=pattern, block_size=bs, iodepth=qd, numjobs=nj,
+        runtime_s=runtime_s, rwmix_write_pct=rwmix, ramp_time_s=2,
+        read_only=ro,
+    )
+
+
+def _rw_phase(
+    name: str, pattern: str, bs: int, qd: int, nj: int = 1,
+    rwmix: int = 0, runtime_s: int = 60,
+) -> PhaseSpec:
+    """A destructive-safe phase: uses _mixed_phase semantics but allows
+    rwmix_write_pct=0 for pure-read phases inside destructive profiles.
+    """
+    return _mixed_phase(name, pattern=pattern, block_size=bs, iodepth=qd,
+                        numjobs=nj, rwmix_write_pct=rwmix, runtime_s=runtime_s)
+
+
+# ── StorageReview Four Corners ──────────────────────────────────────────────
+
+def _sr_four_corners_phases() -> tuple[PhaseSpec, ...]:
+    precondition = _help_phase(
+        name="sr_precond_seq_128k", pattern="write",
+        bs=128 * KIB, qd=32, rwmix=100, runtime_s=60,
+    )
+    return (
+        precondition,
+        _rw_phase("sr_4k_rand_read_128t", pattern="randread", bs=4 * KIB, qd=1, nj=128, runtime_s=120),
+        _help_phase("sr_4k_rand_write_64t", pattern="randwrite", bs=4 * KIB, qd=1, nj=64, rwmix=100, runtime_s=120),
+        _rw_phase("sr_64k_seq_read_16t", pattern="read", bs=64 * KIB, qd=1, nj=16, runtime_s=120),
+        _help_phase("sr_64k_seq_write_8t", pattern="write", bs=64 * KIB, qd=1, nj=8, rwmix=100, runtime_s=120),
+    )
+
+
+SR_FOUR_CORNERS_PROFILE = Profile(
+    name="sr_four_corners",
+    title="SR Four Corners (4K/64K R/W)",
+    description=(
+        "StorageReview-style four-corner benchmark: 4 KiB random read (128 threads) "
+        "+ write (64T), 64 KiB sequential read (16T) + write (8T). Each cell "
+        "runs for 2 minutes; preconditioning pass of 128 KiB sequential write "
+        "beforehand. Destructive, ~10 minutes."
+    ),
+    destructive=True,
+    phases=_sr_four_corners_phases(),
+)
+
+
+# ── StorageReview Deep Latency Sweep ────────────────────────────────────────
+
+def _sr_deep_sweep_phases() -> tuple[PhaseSpec, ...]:
+    qd_sweep = (1, 2, 4, 8, 16, 32)
+    nj_sweep = (1, 2, 4, 8)
+    phases: list[PhaseSpec] = [
+        _help_phase("sr_deep_precond_seq_1m", pattern="write", bs=1 * MIB, qd=4, nj=4, rwmix=100, runtime_s=120),
+    ]
+    for block, label in ((4 * KIB, "4k"), (16 * KIB, "16k"), (64 * KIB, "64k"), (128 * KIB, "128k")):
+        phases.append(_help_phase(
+            f"sr_deep_precond_{label}", pattern="write",
+            bs=block, qd=32, rwmix=100, runtime_s=30,
+        ))
+        for nj in nj_sweep:
+            for qd in qd_sweep:
+                read_name = f"sr_deep_{label}_read_qd{qd}t{nj}"
+                write_name = f"sr_deep_{label}_write_qd{qd}t{nj}"
+                phases.append(_rw_phase(read_name, pattern="randread", bs=block, qd=qd, nj=nj, runtime_s=30))
+                phases.append(_help_phase(write_name, pattern="randwrite", bs=block, qd=qd, nj=nj, rwmix=100, runtime_s=30))
+    return tuple(phases)
+
+
+SR_DEEP_SWEEP_PROFILE = Profile(
+    name="sr_deep_sweep",
+    title="SR Deep IODepth×Threads Sweep",
+    description=(
+        "StorageReview enterprise-style QD×threads sweep across 4 KiB / 16 KiB / "
+        "64 KiB / 128 KiB block sizes, with per-block-size preconditioning. Each "
+        "cell (random-read and random-write at one QD×NJ point) runs for 30 s; "
+        "192 cells total. Designed to produce latency-vs-throughput curves across "
+        "the drive's entire performance envelope. Destructive, ~2 hours."
+    ),
+    destructive=True,
+    phases=_sr_deep_sweep_phases(),
+)
+
+
+# ── ezFIO Comprehensive ─────────────────────────────────────────────────────
+
+def _ezfio_comprehensive_phases() -> tuple[PhaseSpec, ...]:
+    bslist = (512, 1 * KIB, 2 * KIB, 4 * KIB, 8 * KIB, 16 * KIB, 32 * KIB, 64 * KIB, 128 * KIB)
+    tlist = (1, 2, 4, 8, 16, 32, 64, 128, 256)
+    phases: list[PhaseSpec] = []
+
+    # Preconditioning: sequential fill + random fill
+    phases.append(_help_phase("ezfio_precond_seq_128k_q64", pattern="write", bs=128 * KIB, qd=64, rwmix=100, runtime_s=120))
+    phases.append(_help_phase("ezfio_precond_rnd_4k_q256", pattern="randwrite", bs=4 * KIB, qd=256, rwmix=100, runtime_s=120))
+
+    # Group 1: Sequential Read by Block Size
+    for bs in bslist:
+        label = _bs_label(bs)
+        phases.append(_rw_phase(f"ezfio_g1_seq_read_{label}_q256", pattern="read", bs=bs, qd=256, nj=1, runtime_s=60))
+
+    # Group 2: Random Read by Block Size (16t)
+    for bs in bslist:
+        label = _bs_label(bs)
+        phases.append(_rw_phase(f"ezfio_g2_rnd_read_{label}_q16t16", pattern="randread", bs=bs, qd=16, nj=16, runtime_s=60))
+
+    # Group 3: Sequential Write QD1 by Block Size
+    for bs in bslist:
+        label = _bs_label(bs)
+        phases.append(_help_phase(f"ezfio_g3_seq_write_{label}_q1", pattern="write", bs=bs, qd=1, nj=1, rwmix=100, runtime_s=60))
+
+    # Group 4: 4K Random Read by Thread Count
+    for t in tlist:
+        phases.append(_rw_phase(f"ezfio_g4_rnd_4k_read_q1t{t}", pattern="randread", bs=4 * KIB, qd=1, nj=t, runtime_s=60))
+
+    # Group 5: 4K Random 70/30 by Thread Count
+    for t in tlist:
+        phases.append(_help_phase(f"ezfio_g5_rnd_4k_70r30w_q1t{t}", pattern="randrw", bs=4 * KIB, qd=1, nj=t, rwmix=30, runtime_s=60))
+
+    # Group 6: 4K Stability 70/30 (20 min, 200t)
+    phases.append(_help_phase("ezfio_g6_stability_4k_70r30w_q1t200", pattern="randrw", bs=4 * KIB, qd=1, nj=200, rwmix=30, runtime_s=1200))
+
+    # Group 7: 4K Random Write by Thread Count
+    for t in tlist:
+        phases.append(_help_phase(f"ezfio_g7_rnd_4k_write_q1t{t}", pattern="randwrite", bs=4 * KIB, qd=1, nj=t, rwmix=100, runtime_s=60))
+
+    # Group 8: Random Write by Block Size (16t)
+    for bs in bslist:
+        label = _bs_label(bs)
+        phases.append(_help_phase(f"ezfio_g8_rnd_write_{label}_q16t16", pattern="randwrite", bs=bs, qd=16, nj=16, rwmix=100, runtime_s=60))
+
+    return tuple(phases)
+
+
+def _bs_label(bs: int) -> str:
+    if bs >= 128 * KIB:
+        return "128k"
+    if bs >= 64 * KIB:
+        return "64k"
+    if bs >= 32 * KIB:
+        return "32k"
+    if bs >= 16 * KIB:
+        return "16k"
+    if bs >= 8 * KIB:
+        return "8k"
+    if bs >= 4 * KIB:
+        return "4k"
+    if bs >= 2 * KIB:
+        return "2k"
+    if bs >= 1 * KIB:
+        return "1k"
+    return "512b"
+
+
+EZFIO_COMPREHENSIVE_PROFILE = Profile(
+    name="ezfio_comprehensive",
+    title="ezFIO Comprehensive (full shmoo)",
+    description=(
+        "ezFIO-style systematic benchmark: 8 test groups covering sequential "
+        "read/write by block size, random read/write by block size, 4 KiB random "
+        "by thread count (read, write, and 70/30 mixed), plus a 20-minute 4 KiB "
+        "70/30 stability probe. 90 individual measurement cells plus 2 "
+        "preconditioning passes. Designed to match the ezfio.py default run. "
+        "Destructive, ~3.5–5 hours depending on drive speed."
+    ),
+    destructive=True,
+    phases=_ezfio_comprehensive_phases(),
+)
+
+
 PROFILES: dict[str, Profile] = {
     p.name: p
     for p in (
@@ -365,6 +539,9 @@ PROFILES: dict[str, Profile] = {
         STABILITY_PROFILE,
         SNIA_QUICK_PTS_PROFILE,
         ENDURANCE_SOAK_PROFILE,
+        SR_FOUR_CORNERS_PROFILE,
+        SR_DEEP_SWEEP_PROFILE,
+        EZFIO_COMPREHENSIVE_PROFILE,
     )
 }
 
