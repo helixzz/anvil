@@ -141,6 +141,13 @@ async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
         session.add(snapshot)
         result.append(device)
 
+    seen_fingerprints = {d.fingerprint for d in found}
+    for fp, device in existing_by_fp.items():
+        if fp not in seen_fingerprints:
+            device.current_device_path = None
+            device.is_testable = False
+            device.exclusion_reason = "not detected on last rescan"
+
     await session.commit()
     refreshed = await session.execute(select(Device).order_by(Device.last_seen.desc()))
     return list(refreshed.scalars())
