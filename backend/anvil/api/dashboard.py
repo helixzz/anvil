@@ -165,8 +165,10 @@ async def leaderboards(
 async def pcie_degraded_devices(
     session: AsyncSession = Depends(get_session),
 ) -> list[dict[str, Any]]:
-    """List every testable device whose PCIe link is running below its capability."""
-    result = await session.execute(select(Device))
+    """List every present device whose PCIe link is running below its capability."""
+    result = await session.execute(
+        select(Device).where(Device.current_device_path.isnot(None))
+    )
     out: list[dict[str, Any]] = []
     for d in result.scalars():
         pcie = (d.metadata_json or {}).get("pcie")
