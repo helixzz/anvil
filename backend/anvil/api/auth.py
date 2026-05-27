@@ -448,7 +448,7 @@ async def sso_login(
         idp_metadata_url=config.idp_metadata_url,
         idp_entity_id=config.idp_entity_id,
         data_dir=settings_obj.data_dir,
-        verify_ssl=config.sp_acs_url.startswith("https://") if config.sp_acs_url else True,
+        verify_ssl=False,
     )
     idp_url = await asyncio.to_thread(
         prepare_login, sp_settings, relay_state=return_to,
@@ -481,7 +481,7 @@ async def sso_acs(
         idp_metadata_url=config.idp_metadata_url,
         idp_entity_id=config.idp_entity_id,
         data_dir=settings_obj.data_dir,
-        verify_ssl=config.sp_acs_url.startswith("https://") if config.sp_acs_url else True,
+        verify_ssl=False,
     )
     try:
         result = await asyncio.to_thread(
@@ -553,7 +553,7 @@ async def sso_metadata(
         idp_metadata_url=config.idp_metadata_url,
         idp_entity_id=config.idp_entity_id,
         data_dir=settings_obj.data_dir,
-        verify_ssl=config.sp_acs_url.startswith("https://") if config.sp_acs_url else True,
+        verify_ssl=False,
     )
     xml = await asyncio.to_thread(generate_metadata_xml, sp_settings)
     return Response(
