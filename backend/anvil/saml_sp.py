@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
-from onelogin.saml2.settings import OneLogin_Saml2_Settings
+from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser
 
 from anvil.config import get_settings
 from anvil.logging import get_logger
@@ -112,8 +112,10 @@ def build_sp_settings(
     strict = True
     if metadata_xml:
         try:
-            parsed = OneLogin_Saml2_Settings._load_idp_metadata_from_xml(
-                metadata_xml, idp_entity_id or None
+            parsed = OneLogin_Saml2_IdPMetadataParser.parse(
+                metadata_xml,
+                entity_id=idp_entity_id or None,
+                required_sso_binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
             )
             if parsed and "idp" in parsed:
                 idp_config = parsed["idp"]
