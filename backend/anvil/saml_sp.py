@@ -144,7 +144,7 @@ def build_sp_settings(
             "wantAssertionsEncrypted": False,
             "wantNameIdEncrypted": False,
             "signMetadata": True,
-            "wantMessagesSigned": True,
+            "wantMessagesSigned": False,
             "requestedAuthnContext": False,
             "failOnAuthnContextMismatch": False,
             "logoutRequestSigned": True,
