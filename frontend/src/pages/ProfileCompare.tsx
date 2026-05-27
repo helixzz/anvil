@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ReactECharts from "echarts-for-react";
 
-import { api, type Device } from "@/api";
+import { api, getToken, type Device } from "@/api";
 import { humanBps, humanIops, humanNs } from "@/lib/format";
 import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
 
@@ -58,7 +58,7 @@ export default function ProfileCompare() {
   const [result, setResult] = useState<CompareResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const testable: Device[] = (devicesQ.data ?? []).filter((d) => d.is_testable || d.current_device_path);
+  const testable: Device[] = devicesQ.data ?? [];
   const profiles = profilesQ.data ?? [];
 
   const deviceOptions: MultiSelectOption[] = testable.map((d) => ({
@@ -73,7 +73,7 @@ export default function ProfileCompare() {
     try {
       const resp = await fetch(
         `/api/profile-compare?profile_name=${encodeURIComponent(profileName)}&device_ids=${encodeURIComponent(Array.from(deviceIds).join(","))}`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("anvil-token") || ""}` } },
+        { headers: { Authorization: `Bearer ${getToken() || ""}` } },
       );
       if (!resp.ok) throw new Error(await resp.text());
       setResult(await resp.json());
