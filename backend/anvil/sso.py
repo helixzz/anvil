@@ -115,16 +115,25 @@ ROLE_RANK = {
 }
 
 
-def resolve_sso_role(config: SsoConfig, groups: list[str]) -> str:
+def resolve_sso_role(config: SsoConfig, groups: list[str]) -> str | None:
     """Walk the mappings in declaration order; every mapping whose group name
     appears in the IdP-asserted groups contributes a candidate role. Return
-    the highest-ranked candidate (admin > operator > viewer). If no mapping
-    matches, return the config's default_role.
+    the highest-ranked candidate (admin > operator > viewer).
+
+    Returns None if no mapping matches AND there are no mappings configured
+    at all — signaling that the caller should preserve the user's existing
+    role (admin-promoted roles must not be overwritten on re-login when
+    there's no group-based policy).
+
+    If mappings exist but none match, returns default_role (the operator
+    explicitly defined a policy; unmatched users get the default).
     """
     candidates = [m.role for m in config.mappings if m.group in groups]
-    if not candidates:
+    if candidates:
+        return max(candidates, key=lambda r: ROLE_RANK.get(r, 0))
+    if config.mappings:
         return config.default_role
-    return max(candidates, key=lambda r: ROLE_RANK.get(r, 0))
+    return None
 
 
 async def load_sso_config(session: AsyncSession) -> SsoConfig:
@@ -235,14 +244,15 @@ async def provision_sso_user(
             username=username,
             display_name=display_name,
             password_hash=None,
-            role=role,
+            role=role or config.default_role,
             is_active=True,
             last_login_at=now,
             metadata_json={"sso_groups": groups, "sso_provisioned": True},
         )
         session.add(user)
     else:
-        user.role = role
+        if role is not None:
+            user.role = role
         user.is_active = True
         user.last_login_at = now
         user.display_name = display_name or user.display_name

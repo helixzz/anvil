@@ -64,6 +64,9 @@ services:
       - api
     ports:
       - "${ANVIL_WEB_PORT:-8081}:80"
+      - "${ANVIL_WEB_TLS_PORT:-8443}:443"
+    volumes:
+      - ./deploy/tls:/etc/nginx/ssl:ro
     restart: unless-stopped
 
 volumes:

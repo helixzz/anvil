@@ -67,6 +67,7 @@ nav:
   - Operator Guide:
       - RBAC: operator-guide/rbac.md
       - SSO: operator-guide/sso.md
+      - ADFS Integration: operator-guide/adfs.md
       - Environment auto-tune: operator-guide/env-tune.md
       - Crash recovery: operator-guide/recovery.md
       - Security notes: operator-guide/security.md
