@@ -19,6 +19,7 @@ import Sso from "@/pages/Sso";
 import AuditLog from "@/pages/AuditLog";
 import Schedules from "@/pages/Schedules";
 import Inventory from "@/pages/Inventory";
+import ProfileCompare from "@/pages/ProfileCompare";
 
 function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -260,7 +261,8 @@ export default function App() {
           <div className="nav-group-label">Benchmark</div>
           <NavLink to="/runs">{t("nav.runs")}</NavLink>
           <NavLink to="/runs/new">{t("nav.newRun")}</NavLink>
-          <NavLink to="/compare">{t("nav.compare")}</NavLink>
+            <NavLink to="/compare">{t("nav.compare")}</NavLink>
+            <NavLink to="/profile-compare">Profile Compare</NavLink>
         </div>
 
         {isAdmin && (
@@ -328,6 +330,7 @@ export default function App() {
           <Route path="/models" element={<Models />} />
           <Route path="/models/:slug" element={<ModelDetail />} />
           <Route path="/compare" element={<Compare />} />
+          <Route path="/profile-compare" element={<ProfileCompare />} />
           <Route path="/system" element={<System />} />
           <Route path="/inventory" element={<Inventory />} />
           {isAdmin && <Route path="/admin/users" element={<Users />} /> }

@@ -18,6 +18,7 @@ from anvil.api.dashboard import router as dashboard_router
 from anvil.api.devices import router as devices_router
 from anvil.api.environment import router as environment_router
 from anvil.api.models import router as models_router
+from anvil.api.profile_compare import router as profile_compare_router
 from anvil.api.public import router as public_router
 from anvil.api.runs import router as runs_router
 from anvil.api.schedules import router as schedules_router
@@ -149,6 +150,7 @@ app.include_router(models_router, prefix="/api")
 app.include_router(environment_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(comparisons_router, prefix="/api")
+app.include_router(profile_compare_router, prefix="/api")
 app.include_router(schedules_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(public_router)
