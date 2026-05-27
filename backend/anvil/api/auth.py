@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 import ulid
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -463,8 +463,8 @@ async def sso_login(
 
 @router.post("/auth/sso/acs")
 async def sso_acs(
-    SAMLResponse: str = Query(default=""),
-    RelayState: str = Query(default="/"),
+    SAMLResponse: str = Form(default=""),
+    RelayState: str = Form(default="/"),
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
     config = await load_sso_config(session)
