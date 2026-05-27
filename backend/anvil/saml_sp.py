@@ -169,8 +169,9 @@ def prepare_login(
     settings: dict[str, Any],
     relay_state: str | None = None,
 ) -> str:
+    sp_acs_url = settings["sp"]["assertionConsumerService"]["url"].rsplit("/api/", 1)[0]
     auth = OneLogin_Saml2_Auth(
-        _make_request(relay_state=relay_state),
+        _make_request(sp_acs_url=sp_acs_url, relay_state=relay_state),
         old_settings=settings,
     )
     return auth.login(return_to=relay_state)
@@ -181,8 +182,9 @@ def process_acs(
     saml_response_b64: str,
     relay_state: str | None = None,
 ) -> dict[str, Any]:
+    sp_acs_url = settings["sp"]["assertionConsumerService"]["url"].rsplit("/api/", 1)[0]
     auth = OneLogin_Saml2_Auth(
-        _make_request(post_data={"SAMLResponse": saml_response_b64}, relay_state=relay_state),
+        _make_request(sp_acs_url=sp_acs_url, post_data={"SAMLResponse": saml_response_b64}, relay_state=relay_state),
         old_settings=settings,
     )
     auth.process_response()
@@ -215,7 +217,8 @@ class SamlValidationError(RuntimeError):
 
 
 def generate_metadata_xml(settings: dict[str, Any]) -> str:
-    auth = OneLogin_Saml2_Auth(_make_request(), old_settings=settings)
+    sp_acs_url = settings["sp"]["assertionConsumerService"]["url"].rsplit("/api/", 1)[0]
+    auth = OneLogin_Saml2_Auth(_make_request(sp_acs_url=sp_acs_url), old_settings=settings)
     sp_settings = auth.get_settings()
     metadata = sp_settings.get_sp_metadata()
     errors = sp_settings.validate_metadata(metadata)
@@ -244,14 +247,17 @@ def _fetch_metadata(url: str, verify_ssl: bool = True) -> str | None:
 
 
 def _make_request(
+    sp_acs_url: str = "",
     relay_state: str | None = None,
     post_data: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    from urllib.parse import urlparse
+    parsed = urlparse(sp_acs_url) if sp_acs_url else None
     req: dict[str, Any] = {
-        "https": "off",
-        "http_host": "localhost",
+        "https": "on" if (parsed and parsed.scheme == "https") else "off",
+        "http_host": parsed.netloc if parsed else "localhost",
         "script_name": "/api/auth/sso/acs",
-        "server_port": 8080,
+        "server_port": parsed.port or (443 if parsed and parsed.scheme == "https" else 8080) if parsed else 8080,
         "get_data": {},
         "post_data": post_data or {},
         "query_string": {},
