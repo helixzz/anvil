@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
 
 import { api, getToken, type Device } from "@/api";
@@ -38,18 +39,8 @@ interface CompareResult {
   groups: string[];
 }
 
-const GROUP_LABELS: Record<string, string> = {
-  g1: "Sequential Read by Block Size",
-  g2: "Random Read by Block Size",
-  g3: "Sequential Write by Block Size",
-  g4: "4K Random Read by Threads",
-  g5: "4K Random 70/30 by Threads",
-  g6: "4K Stability (20 min)",
-  g7: "4K Random Write by Threads",
-  g8: "Random Write by Block Size",
-};
-
 export default function ProfileCompare() {
+  const { t } = useTranslation();
   const devicesQ = useQuery({ queryKey: ["devices"], queryFn: api.listDevices });
   const profilesQ = useQuery({ queryKey: ["profiles"], queryFn: api.listProfiles });
 
@@ -58,17 +49,17 @@ export default function ProfileCompare() {
   const [result, setResult] = useState<CompareResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const testable: Device[] = devicesQ.data ?? [];
+  const allDevices: Device[] = devicesQ.data ?? [];
   const profiles = profilesQ.data ?? [];
 
-  const deviceOptions: MultiSelectOption[] = testable.map((d) => ({
+  const deviceOptions: MultiSelectOption[] = allDevices.map((d) => ({
     value: d.id,
-    label: `${d.brand || ""} ${d.model}`,
+    label: `${d.brand || ""} ${d.model}`.trim(),
     sub: d.serial,
   }));
 
   async function load() {
-    if (!profileName || deviceIds.size === 0) return;
+    if (!profileName || deviceIds.size < 2) return;
     setLoading(true);
     try {
       const resp = await fetch(
@@ -84,13 +75,14 @@ export default function ProfileCompare() {
     }
   }
 
+
   return (
     <div className="col" style={{ gap: 20 }}>
       <div className="topbar">
         <div>
-          <h2>Profile Performance Comparison</h2>
+          <h2>{t("profileCompare.title")}</h2>
           <div className="dim" style={{ fontSize: 12 }}>
-            Multi-dimensional line charts: select a profile and 2+ devices to overlay their performance across block sizes, queue depths, and thread counts.
+            {t("profileCompare.subtitle")}
           </div>
         </div>
       </div>
@@ -98,25 +90,25 @@ export default function ProfileCompare() {
       <div className="card">
         <div className="row" style={{ gap: 16, flexWrap: "wrap", alignItems: "end" }}>
           <div className="col" style={{ gap: 4, minWidth: 200 }}>
-            <span className="dim" style={{ fontSize: 11 }}>Profile</span>
+            <span className="dim" style={{ fontSize: 11 }}>{t("profileCompare.pickProfile")}</span>
             <select value={profileName} onChange={(e) => setProfileName(e.target.value)} style={{ fontSize: 13 }}>
-              <option value="">Pick a profile…</option>
+              <option value="">—</option>
               {profiles.map((p) => (
                 <option key={p.name} value={p.name}>{p.title} ({p.phases.length} phases)</option>
               ))}
             </select>
           </div>
           <div className="col" style={{ gap: 4, minWidth: 300 }}>
-            <span className="dim" style={{ fontSize: 11 }}>Devices to compare</span>
+            <span className="dim" style={{ fontSize: 11 }}>{t("profileCompare.pickDevices")}</span>
             <MultiSelect
               options={deviceOptions}
               selected={deviceIds}
               onChange={setDeviceIds}
-              placeholder="Pick 2+ devices…"
+              placeholder={t("profileCompare.pickDevices")}
             />
           </div>
           <button className="btn-primary" onClick={load} disabled={loading || !profileName || deviceIds.size < 2}>
-            {loading ? "Loading…" : "Compare"}
+            {loading ? t("profileCompare.loading") : t("profileCompare.compare")}
           </button>
         </div>
       </div>
@@ -131,7 +123,7 @@ export default function ProfileCompare() {
 
       {result && result.series.length === 0 && (
         <div className="card dim" style={{ textAlign: "center", padding: 40 }}>
-          No completed runs found for this profile on the selected devices.
+          {t("profileCompare.noData")}
         </div>
       )}
     </div>
@@ -139,6 +131,7 @@ export default function ProfileCompare() {
 }
 
 function GroupChart({ group, series }: { group: string; series: Series[] }) {
+  const { t } = useTranslation();
   const groupPoints = series.map((s) => ({
     ...s,
     points: s.points.filter((p) => p.group === group),
@@ -152,7 +145,7 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
   const hasQD = new Set(firstPoints.map((p) => p.qd)).size > 1;
 
   const xAxis = hasBS ? "bs_label" : hasThreads ? "threads" : hasQD ? "qd" : "raw_name";
-  const xLabel = hasBS ? "Block Size" : hasThreads ? "Threads" : hasQD ? "Queue Depth" : "Phase";
+  const xLabel = hasBS ? t("profileCompare.blockSize") : hasThreads ? t("profileCompare.threads") : hasQD ? t("profileCompare.queueDepth") : t("profileCompare.phase");
 
   const xValues = [...new Set(firstPoints.map((p) => String(p[xAxis as keyof Point])))];
 
@@ -160,15 +153,17 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
   const hasWrite = firstPoints.some((p) => p.write_iops && p.write_iops > 0);
 
   const charts: { title: string; metric: string; formatter: (v: number) => string }[] = [];
-  if (hasRead) charts.push({ title: "Read IOPS", metric: "read_iops", formatter: humanIops });
-  if (hasWrite) charts.push({ title: "Write IOPS", metric: "write_iops", formatter: humanIops });
-  if (hasRead) charts.push({ title: "Read BW", metric: "read_bw_bytes", formatter: humanBps });
-  if (hasWrite) charts.push({ title: "Write BW", metric: "write_bw_bytes", formatter: humanBps });
-  if (hasRead) charts.push({ title: "Read Latency (mean)", metric: "read_clat_mean_ns", formatter: humanNs });
+  if (hasRead) charts.push({ title: t("profileCompare.readIops"), metric: "read_iops", formatter: humanIops });
+  if (hasWrite) charts.push({ title: t("profileCompare.writeIops"), metric: "write_iops", formatter: humanIops });
+  if (hasRead) charts.push({ title: t("profileCompare.readBw"), metric: "read_bw_bytes", formatter: humanBps });
+  if (hasWrite) charts.push({ title: t("profileCompare.writeBw"), metric: "write_bw_bytes", formatter: humanBps });
+  if (hasRead) charts.push({ title: t("profileCompare.readLatency"), metric: "read_clat_mean_ns", formatter: humanNs });
+
+  const groupLabel = t(`profileCompare.${group}` as any, group);
 
   return (
     <div className="card">
-      <h3>{GROUP_LABELS[group] || group}</h3>
+      <h3>{groupLabel}</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(450px, 1fr))", gap: 16 }}>
         {charts.map((chart) => (
           <LineChart
