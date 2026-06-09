@@ -7,6 +7,23 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.10.3 — 2026-06-09
+
+### Fixed
+- 3D Profile Compare: dark "holes" appearing on surfaces at certain
+  rotation angles. The dark cube floor was being painted in
+  back-to-front order alongside the surface quads, so when its
+  centroid happened to land between two surface tiles it would draw
+  on top of an earlier surface tile and look like a void.
+- Decoupled the floor from painter's-algorithm sorting: render
+  floor + axis lines in fixed order first, then sorted surface
+  quads on top, then tick labels last.
+- Switched per-quad depth metric from centroid Z to min-Z (closest
+  corner) so quads with steep slopes occlude correctly.
+- Increased surface and side-wall opacity (0.78 → 0.92, 0.55 → 0.7)
+  and raised the Lambert shading floor (0.55 → 0.7) so back-facing
+  tiles no longer fade into near-black.
+
 ## 1.10.2 — 2026-06-09
 
 ### Fixed

@@ -122,24 +122,19 @@ export default function Plot3DBars({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
+        {scene.floor && (
+          <polygon
+            points={scene.floor.pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")}
+            fill={scene.floor.fill}
+            stroke={scene.floor.stroke}
+            strokeWidth={0.5}
+            fillOpacity={scene.floor.opacity}
+          />
+        )}
         {scene.axes.map((line, i) => (
           <line key={`axis-${i}`} x1={line.a.x} y1={line.a.y} x2={line.b.x} y2={line.b.y} stroke="#334155" strokeWidth={1} />
         ))}
-        {scene.ticks.map((tk, i) => (
-          <text
-            key={`tick-${i}`}
-            x={tk.pos.x}
-            y={tk.pos.y}
-            fill={tk.bold ? "#cbd5e1" : "#94a3b8"}
-            fontSize={tk.bold ? 12 : 10}
-            fontWeight={tk.bold ? 500 : 400}
-            textAnchor={tk.anchor}
-            dominantBaseline={tk.baseline}
-          >
-            {tk.text}
-          </text>
-        ))}
-        {scene.quads.map((q, i) => (
+        {scene.surfaces.map((q, i) => (
           <polygon
             key={i}
             points={q.pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")}
@@ -157,6 +152,20 @@ export default function Plot3DBars({
             }
             onMouseLeave={q.hover ? () => setHover(null) : undefined}
           />
+        ))}
+        {scene.ticks.map((tk, i) => (
+          <text
+            key={`tick-${i}`}
+            x={tk.pos.x}
+            y={tk.pos.y}
+            fill={tk.bold ? "#cbd5e1" : "#94a3b8"}
+            fontSize={tk.bold ? 12 : 10}
+            fontWeight={tk.bold ? 500 : 400}
+            textAnchor={tk.anchor}
+            dominantBaseline={tk.baseline}
+          >
+            {tk.text}
+          </text>
         ))}
       </svg>
       {hover && (
@@ -202,7 +211,12 @@ interface SceneTick {
   bold: boolean;
 }
 interface SceneAxis { a: Vec2; b: Vec2; }
-interface Scene { quads: Quad[]; axes: SceneAxis[]; ticks: SceneTick[]; }
+interface Scene {
+  floor: Quad | null;
+  surfaces: Quad[];
+  axes: SceneAxis[];
+  ticks: SceneTick[];
+}
 
 function buildScene(
   devices: Plot3DBarsProps["devices"],
@@ -219,7 +233,7 @@ function buildScene(
 ): Scene {
   const nx = xLabels.length;
   const ny = yLabels.length;
-  if (nx < 1 || ny < 1) return { quads: [], axes: [], ticks: [] };
+  if (nx < 1 || ny < 1) return { floor: null, surfaces: [], axes: [], ticks: [] };
 
   let zMax = 0;
   for (const dev of devices) {
@@ -298,13 +312,13 @@ function buildScene(
     { x: -cubeX / 2, y: -cubeZ / 2, z: cubeY / 2 },
   ];
   const basePts = baseCorners.map(wp);
-  quads.push({
+  const floor: Quad = {
     pts: basePts.map((b) => b.p),
     depth: (basePts[0].t.z + basePts[1].t.z + basePts[2].t.z + basePts[3].t.z) / 4,
     fill: "#0c1426",
     stroke: "#1e293b",
     opacity: 0.85,
-  });
+  };
 
   for (let xi = 0; xi < nx; xi++) {
     const xWorld = -cubeX / 2 + insetX + xi * stepX;
@@ -352,7 +366,7 @@ function buildScene(
 
   quads.sort((a, b) => a.depth - b.depth);
 
-  return { quads, axes, ticks };
+  return { floor, surfaces: quads, axes, ticks };
 }
 
 function buildSurfaceQuads(
@@ -401,16 +415,16 @@ function buildSurfaceQuads(
       const bz = tCorners[3].z - tCorners[0].z;
       const ny_ = az * bx - ax * bz;
       const nlen = Math.sqrt((ay * bz - az * by) ** 2 + ny_ ** 2 + (ax * by - ay * bx) ** 2) || 1;
-      const lightDot = Math.max(0.55, Math.min(1.15, (ny_ / nlen) * 0.5 + 0.75));
+      const lightDot = Math.max(0.7, Math.min(1.15, (ny_ / nlen) * 0.4 + 0.85));
       const fill = lighten(baseFill, lightDot);
-      const depth = (tCorners[0].z + tCorners[1].z + tCorners[2].z + tCorners[3].z) / 4;
+      const depth = Math.min(tCorners[0].z, tCorners[1].z, tCorners[2].z, tCorners[3].z);
 
       out.push({
         pts,
         depth,
         fill,
         stroke: lighten(baseFill, 1.3),
-        opacity: 0.78,
+        opacity: 0.92,
         hover: { deviceName: dev.name, xv: xLabels[xi], yv: yLabels[yi], value: v00 },
       });
     }
@@ -427,8 +441,8 @@ function buildSurfaceQuads(
       dataToWorld(xi, 0, 0),
     ];
     const { pts, tCorners } = project4(corners);
-    const depth = (tCorners[0].z + tCorners[2].z) / 2;
-    out.push({ pts, depth, fill: sideFill, stroke: sideFill, opacity: 0.55 });
+    const depth = Math.min(tCorners[0].z, tCorners[1].z, tCorners[2].z, tCorners[3].z);
+    out.push({ pts, depth, fill: sideFill, stroke: sideFill, opacity: 0.7 });
   }
   for (let yi = 0; yi < ny - 1; yi++) {
     const v0 = dev.matrix[0]?.[yi];
@@ -441,8 +455,8 @@ function buildSurfaceQuads(
       dataToWorld(0, yi, 0),
     ];
     const { pts, tCorners } = project4(corners);
-    const depth = (tCorners[0].z + tCorners[2].z) / 2;
-    out.push({ pts, depth, fill: sideFill, stroke: sideFill, opacity: 0.55 });
+    const depth = Math.min(tCorners[0].z, tCorners[1].z, tCorners[2].z, tCorners[3].z);
+    out.push({ pts, depth, fill: sideFill, stroke: sideFill, opacity: 0.7 });
   }
 
   return out;
