@@ -234,8 +234,10 @@ function buildScene(
   const cubeX = 1.6;
   const cubeY = 1.0;
   const cubeZ = 1.0;
-  const stepX = nx > 1 ? cubeX / (nx - 1) : 0;
-  const stepY = ny > 1 ? cubeY / (ny - 1) : 0;
+  const insetX = nx > 1 ? cubeX * 0.08 : 0;
+  const insetY = ny > 1 ? cubeY * 0.08 : 0;
+  const stepX = nx > 1 ? (cubeX - 2 * insetX) / (nx - 1) : 0;
+  const stepY = ny > 1 ? (cubeY - 2 * insetY) / (ny - 1) : 0;
 
   const rotXRad = (rotXDeg * Math.PI) / 180;
   const rotYRad = (rotYDeg * Math.PI) / 180;
@@ -275,9 +277,9 @@ function buildScene(
 
   function dataToWorld(xi: number, yi: number, val: number): Vec3 {
     return {
-      x: -cubeX / 2 + xi * stepX,
+      x: -cubeX / 2 + insetX + xi * stepX,
       y: -cubeZ / 2 + (val / zMax) * cubeZ,
-      z: -cubeY / 2 + yi * stepY,
+      z: -cubeY / 2 + insetY + yi * stepY,
     };
   }
   function wp(v: Vec3): { p: Vec2; t: Vec3 } {
@@ -305,13 +307,13 @@ function buildScene(
   });
 
   for (let xi = 0; xi < nx; xi++) {
-    const xWorld = -cubeX / 2 + xi * stepX;
+    const xWorld = -cubeX / 2 + insetX + xi * stepX;
     const a = wp({ x: xWorld, y: -cubeZ / 2, z: -cubeY / 2 });
     const b = wp({ x: xWorld, y: -cubeZ / 2, z: cubeY / 2 });
     axes.push({ a: a.p, b: b.p });
   }
   for (let yi = 0; yi < ny; yi++) {
-    const zWorld = -cubeY / 2 + yi * stepY;
+    const zWorld = -cubeY / 2 + insetY + yi * stepY;
     const a = wp({ x: -cubeX / 2, y: -cubeZ / 2, z: zWorld });
     const b = wp({ x: cubeX / 2, y: -cubeZ / 2, z: zWorld });
     axes.push({ a: a.p, b: b.p });
@@ -327,12 +329,12 @@ function buildScene(
   }
 
   for (let xi = 0; xi < nx; xi++) {
-    const xWorld = -cubeX / 2 + xi * stepX;
+    const xWorld = -cubeX / 2 + insetX + xi * stepX;
     const p = wp({ x: xWorld, y: -cubeZ / 2, z: cubeY / 2 + 0.05 });
     ticks.push({ pos: { x: p.p.x, y: p.p.y + 14 }, text: xLabels[xi], anchor: "middle", baseline: "hanging", bold: false });
   }
   for (let yi = 0; yi < ny; yi++) {
-    const zWorld = -cubeY / 2 + yi * stepY;
+    const zWorld = -cubeY / 2 + insetY + yi * stepY;
     const p = wp({ x: cubeX / 2 + 0.05, y: -cubeZ / 2, z: zWorld });
     ticks.push({ pos: { x: p.p.x + 6, y: p.p.y }, text: yLabels[yi], anchor: "start", baseline: "middle", bold: false });
   }

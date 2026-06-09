@@ -7,6 +7,15 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.10.2 — 2026-06-09
+
+### Fixed
+- 3D Profile Compare surfaces no longer touch the cube's outer
+  frame. Added an 8% inset on both X and Y so the data surface (and
+  its side walls) sits cleanly inside the axis frame instead of
+  visually fusing with it. Tick labels and per-data gridlines move
+  with the inset so they still align with the actual data points.
+
 ## 1.10.1 — 2026-06-09
 
 ### Fixed
