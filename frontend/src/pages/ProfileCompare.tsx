@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
@@ -7,8 +7,16 @@ import { api, getToken, type Device } from "@/api";
 import { humanBps, humanIops, humanNs } from "@/lib/format";
 import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
 
+const Plot3DBars = lazy(() => import("@/components/Plot3DBars"));
+
 const PALETTE = ["#60a5fa", "#f4a340", "#4ade80", "#c084fc", "#f87171", "#22d3ee", "#facc15", "#a78bfa"];
 const HEATMAP_COLORS = ["#0c1426", "#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#fbbf24", "#f97316", "#ef4444"];
+
+const LS_PROFILE = "anvil.profileCompare.profile";
+const LS_DEVICES = "anvil.profileCompare.devices";
+const LS_VIEWMODE = "anvil.profileCompare.viewMode";
+
+type ViewMode = "heatmap" | "3d";
 
 interface Point {
   raw_name: string;
@@ -54,15 +62,40 @@ function sortDim(values: string[], key: DimKey): string[] {
   return [...values].sort((a, b) => Number(a) - Number(b));
 }
 
+function loadLS<T>(key: string, fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    if (v == null) return fallback;
+    return JSON.parse(v) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveLS(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    void 0;
+  }
+}
+
 export default function ProfileCompare() {
   const { t } = useTranslation();
   const devicesQ = useQuery({ queryKey: ["devices"], queryFn: api.listDevices });
   const profilesQ = useQuery({ queryKey: ["profiles"], queryFn: api.listProfiles });
 
-  const [profileName, setProfileName] = useState("");
-  const [deviceIds, setDeviceIds] = useState<Set<string>>(new Set());
+  const [profileName, setProfileName] = useState<string>(() => loadLS<string>(LS_PROFILE, ""));
+  const [deviceIds, setDeviceIds] = useState<Set<string>>(
+    () => new Set(loadLS<string[]>(LS_DEVICES, [])),
+  );
+  const [viewMode, setViewMode] = useState<ViewMode>(() => loadLS<ViewMode>(LS_VIEWMODE, "heatmap"));
   const [result, setResult] = useState<CompareResult | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => { saveLS(LS_PROFILE, profileName); }, [profileName]);
+  useEffect(() => { saveLS(LS_DEVICES, Array.from(deviceIds)); }, [deviceIds]);
+  useEffect(() => { saveLS(LS_VIEWMODE, viewMode); }, [viewMode]);
 
   const allDevices: Device[] = devicesQ.data ?? [];
   const profiles = profilesQ.data ?? [];
@@ -121,6 +154,25 @@ export default function ProfileCompare() {
               placeholder={t("profileCompare.pickDevices")}
             />
           </div>
+          <div className="col" style={{ gap: 4 }}>
+            <span className="dim" style={{ fontSize: 11 }}>{t("profileCompare.viewMode")}</span>
+            <div className="row" style={{ gap: 0 }}>
+              <button
+                className={viewMode === "heatmap" ? "btn-primary" : ""}
+                onClick={() => setViewMode("heatmap")}
+                style={{ fontSize: 12, padding: "6px 10px", borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+              >
+                {t("profileCompare.viewHeatmap")}
+              </button>
+              <button
+                className={viewMode === "3d" ? "btn-primary" : ""}
+                onClick={() => setViewMode("3d")}
+                style={{ fontSize: 12, padding: "6px 10px", borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+              >
+                {t("profileCompare.view3D")}
+              </button>
+            </div>
+          </div>
           <button className="btn-primary" onClick={load} disabled={loading || !profileName || deviceIds.size < 2}>
             {loading ? t("profileCompare.loading") : t("profileCompare.compare")}
           </button>
@@ -130,7 +182,7 @@ export default function ProfileCompare() {
       {result && result.series.length > 0 && (
         <div className="col" style={{ gap: 24 }}>
           {result.groups.map((group) => (
-            <GroupChart key={group} group={group} series={result.series} />
+            <GroupChart key={group} group={group} series={result.series} viewMode={viewMode} />
           ))}
         </div>
       )}
@@ -166,7 +218,7 @@ function formatGroupLabel(group: string, t: (k: string, fallback?: string) => st
   return group.split("_").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
 }
 
-function GroupChart({ group, series }: { group: string; series: Series[] }) {
+function GroupChart({ group, series, viewMode }: { group: string; series: Series[]; viewMode: ViewMode }) {
   const { t } = useTranslation();
   const groupSeries = series
     .map((s) => ({ ...s, points: s.points.filter((p) => p.group === group) }))
@@ -208,16 +260,29 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
       <div className="col" style={{ gap: 24 }}>
         {charts.map((chart) =>
           isMatrix ? (
-            <HeatmapRow
-              key={chart.metric}
-              title={chart.title}
-              xDim={xDim}
-              yDim={yDim}
-              metric={chart.metric}
-              formatter={chart.formatter}
-              series={groupSeries}
-              t={t as any}
-            />
+            viewMode === "3d" ? (
+              <Chart3DSection
+                key={chart.metric}
+                title={chart.title}
+                xDim={xDim}
+                yDim={yDim}
+                metric={chart.metric}
+                formatter={chart.formatter}
+                series={groupSeries}
+                t={t as any}
+              />
+            ) : (
+              <HeatmapRow
+                key={chart.metric}
+                title={chart.title}
+                xDim={xDim}
+                yDim={yDim}
+                metric={chart.metric}
+                formatter={chart.formatter}
+                series={groupSeries}
+                t={t as any}
+              />
+            )
           ) : (
             <Chart2D
               key={chart.metric}
@@ -231,6 +296,56 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
           ),
         )}
       </div>
+    </div>
+  );
+}
+
+function Chart3DSection({
+  title, xDim, yDim, metric, formatter, series, t,
+}: {
+  title: string;
+  xDim: { key: DimKey; values: string[] };
+  yDim: { key: DimKey; values: string[] };
+  metric: string;
+  formatter: (v: number) => string;
+  series: { device_id: string; model: string; brand: string; serial: string; points: Point[] }[];
+  t: (k: string) => string;
+}) {
+  const devices = series.map((dev, devIdx) => {
+    const devLabel = `${dev.brand} ${dev.model}`.trim() || dev.serial;
+    const matrix: (number | null)[][] = xDim.values.map((xv) =>
+      yDim.values.map((yv) => {
+        const pt = dev.points.find(
+          (p) =>
+            String(p[xDim.key as keyof Point]) === xv &&
+            String(p[yDim.key as keyof Point]) === yv,
+        );
+        const v = pt ? (pt as any)[metric] : null;
+        return typeof v === "number" && v > 0 ? v : null;
+      }),
+    );
+    return {
+      name: devLabel,
+      color: PALETTE[devIdx % PALETTE.length],
+      matrix,
+    };
+  });
+
+  return (
+    <div className="col" style={{ gap: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)" }}>{title}</div>
+      <Suspense fallback={<div className="dim" style={{ padding: 24, textAlign: "center" }}>{t("profileCompare.loading3D")}</div>}>
+        <Plot3DBars
+          xLabels={xDim.values}
+          yLabels={yDim.values}
+          xAxisName={dimLabel(t, xDim.key)}
+          yAxisName={dimLabel(t, yDim.key)}
+          zAxisName={title}
+          devices={devices}
+          formatter={formatter}
+          height={460}
+        />
+      </Suspense>
     </div>
   );
 }

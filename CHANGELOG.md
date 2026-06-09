@@ -7,6 +7,28 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.10.0 — 2026-06-09
+
+### Added
+- **3D view mode** for Profile Compare. Users can toggle between
+  Heatmap (per-device matrix) and 3D (cross-device overlay).
+  - 3D mode renders all devices in a single 3D scene (X = primary
+    dimension, Y = secondary dimension, Z = metric value), making
+    cross-device comparison straightforward.
+  - Each device gets a distinct color; bars are rendered as
+    stems-with-markers so visually similar devices remain
+    distinguishable even at overlapping data points.
+  - Powered by Plotly.js, lazy-loaded only when the user picks 3D
+    mode (kept out of the main bundle via `manualChunks`).
+- **Selection persistence.** Profile Compare now remembers the last
+  selected profile, devices, and view mode (heatmap / 3D) in
+  localStorage, so users no longer need to re-pick after each page
+  refresh.
+
+### Changed
+- Added 4 new i18n keys (`viewMode`, `viewHeatmap`, `view3D`,
+  `loading3D`) in en + zh (341 keys per locale, zero drift).
+
 ## 1.9.1 — 2026-06-09
 
 ### Changed

@@ -353,6 +353,10 @@
     "patternRead": "顺序读取",
     "patternWrite": "顺序写入",
     "patternMixed": "混合读写",
+    "viewMode": "视图",
+    "viewHeatmap": "热力图",
+    "view3D": "3D",
+    "loading3D": "正在加载 3D 引擎…",
     "dimensionsHint": "X 轴：{{x}}。每条曲线代表不同的 {{series}}（用线型区分）。"
   },
   "admin": {

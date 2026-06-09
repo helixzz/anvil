@@ -1,6 +1,6 @@
 {
   "name": "anvil-web",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "description": "Anvil — NVMe Validator & IOps Lab, web frontend",
   "private": true,
   "type": "module",
@@ -18,9 +18,11 @@
     "echarts-for-react": "^3.0.2",
     "i18next": "^23.16.0",
     "i18next-browser-languagedetector": "^8.0.0",
+    "plotly.js-dist-min": "^3.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^15.1.1",
+    "react-plotly.js": "^2.6.0",
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {

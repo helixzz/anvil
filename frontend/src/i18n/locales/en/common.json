@@ -353,6 +353,10 @@
     "patternRead": "Sequential Read",
     "patternWrite": "Sequential Write",
     "patternMixed": "Mixed",
+    "viewMode": "View",
+    "viewHeatmap": "Heatmap",
+    "view3D": "3D",
+    "loading3D": "Loading 3D engine…",
     "dimensionsHint": "X-axis: {{x}}. Each line represents a different {{series}} value (line style varies)."
   },
   "admin": {
