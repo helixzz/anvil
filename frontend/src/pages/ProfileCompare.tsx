@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
@@ -6,8 +6,7 @@ import ReactECharts from "echarts-for-react";
 import { api, getToken, type Device } from "@/api";
 import { humanBps, humanIops, humanNs } from "@/lib/format";
 import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
-
-const Plot3DBars = lazy(() => import("@/components/Plot3DBars"));
+import Plot3DBars from "@/components/Plot3DBars";
 
 const PALETTE = ["#60a5fa", "#f4a340", "#4ade80", "#c084fc", "#f87171", "#22d3ee", "#facc15", "#a78bfa"];
 const HEATMAP_COLORS = ["#0c1426", "#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#fbbf24", "#f97316", "#ef4444"];
@@ -334,18 +333,16 @@ function Chart3DSection({
   return (
     <div className="col" style={{ gap: 8 }}>
       <div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)" }}>{title}</div>
-      <Suspense fallback={<div className="dim" style={{ padding: 24, textAlign: "center" }}>{t("profileCompare.loading3D")}</div>}>
-        <Plot3DBars
-          xLabels={xDim.values}
-          yLabels={yDim.values}
-          xAxisName={dimLabel(t, xDim.key)}
-          yAxisName={dimLabel(t, yDim.key)}
-          zAxisName={title}
-          devices={devices}
-          formatter={formatter}
-          height={460}
-        />
-      </Suspense>
+      <Plot3DBars
+        xLabels={xDim.values}
+        yLabels={yDim.values}
+        xAxisName={dimLabel(t, xDim.key)}
+        yAxisName={dimLabel(t, yDim.key)}
+        zAxisName={title}
+        devices={devices}
+        formatter={formatter}
+        height={460}
+      />
     </div>
   );
 }

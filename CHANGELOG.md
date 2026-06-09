@@ -7,6 +7,28 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.10.1 — 2026-06-09
+
+### Fixed
+- **Profile Compare 3D view no longer requires WebGL.** The previous
+  Plotly-based 3D chart hit the same WebGL shader compilation error
+  as echarts-gl on some browser/GPU combos (`gl-shader: Error
+  compiling shader: null`). Replaced with a pure-SVG 3D surface
+  renderer (orthographic projection + painter's algorithm), so 3D
+  works on every browser regardless of GPU/driver state.
+- The 3D view now correctly renders the data as a **horizontally
+  connected surface** (mesh of quadrilaterals between adjacent grid
+  points) rather than vertical stems, matching user expectation for
+  multi-dimensional sweep data.
+- Drag to rotate, "Reset view" button to restore default angle,
+  hover any quad to see the device, axis values, and metric.
+
+### Changed
+- Removed `plotly.js-dist-min` and `react-plotly.js` dependencies
+  (saved 1.46 MB gzipped from the lazy-loaded 3D chunk).
+- 3D component is now ~2 KB inlined into the main bundle (no extra
+  network round-trip when switching to 3D mode).
+
 ## 1.10.0 — 2026-06-09
 
 ### Added

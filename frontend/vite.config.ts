@@ -41,7 +41,6 @@ export default defineConfig({
         manualChunks(id: string) {
           if (!id.includes("node_modules")) return undefined;
           if (id.includes("echarts") || id.includes("zrender")) return "vendor-echarts";
-          if (id.includes("plotly")) return "vendor-plotly";
           if (id.includes("react-dom") || id.includes("scheduler")) return "vendor-react";
           if (id.includes("/react/")) return "vendor-react";
           if (id.includes("@tanstack")) return "vendor-query";
