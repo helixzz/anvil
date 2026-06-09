@@ -7,6 +7,19 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.9.1 — 2026-06-09
+
+### Changed
+- **Replaced 3D bar charts with 2D heatmap matrices.** The echarts-gl
+  3D renderer crashed on some browsers/GPUs with a WebGL shader
+  validation error. Multi-dimensional sweeps (e.g. Queue Depth ×
+  Threads) now render as side-by-side 2D heatmaps — one matrix per
+  device. X-axis = first dimension, Y-axis = second dimension,
+  cell color = metric value, with the actual number rendered inside
+  each cell. All devices share the same color scale for direct
+  visual comparison.
+- Removed `echarts-gl` dependency.
+
 ## 1.9.0 — 2026-06-09
 
 ### Changed

@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
-import "echarts-gl";
 
 import { api, getToken, type Device } from "@/api";
 import { humanBps, humanIops, humanNs } from "@/lib/format";
 import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
 
 const PALETTE = ["#60a5fa", "#f4a340", "#4ade80", "#c084fc", "#f87171", "#22d3ee", "#facc15", "#a78bfa"];
+const HEATMAP_COLORS = ["#0c1426", "#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#fbbf24", "#f97316", "#ef4444"];
 
 interface Point {
   raw_name: string;
@@ -186,7 +186,7 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
 
   if (dims.length === 0) return null;
 
-  const is3D = dims.length >= 2;
+  const isMatrix = dims.length >= 2;
   const xDim = dims[0];
   const yDim = dims[1];
 
@@ -205,10 +205,10 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
   return (
     <div className="card">
       <h3>{groupLabel}</h3>
-      <div style={{ display: "grid", gridTemplateColumns: is3D ? "1fr" : "repeat(auto-fit, minmax(480px, 1fr))", gap: 16 }}>
+      <div className="col" style={{ gap: 24 }}>
         {charts.map((chart) =>
-          is3D ? (
-            <Chart3D
+          isMatrix ? (
+            <HeatmapRow
               key={chart.metric}
               title={chart.title}
               xDim={xDim}
@@ -235,7 +235,7 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
   );
 }
 
-function Chart3D({
+function HeatmapRow({
   title, xDim, yDim, metric, formatter, series, t,
 }: {
   title: string;
@@ -243,98 +243,177 @@ function Chart3D({
   yDim: { key: DimKey; values: string[] };
   metric: string;
   formatter: (v: number) => string;
-  series: { model: string; brand: string; serial: string; points: Point[] }[];
+  series: { device_id: string; model: string; brand: string; serial: string; points: Point[] }[];
   t: (k: string) => string;
 }) {
-  const bar3dSeries: any[] = series.map((dev, devIdx) => {
-    const devLabel = `${dev.brand} ${dev.model}`.trim() || dev.serial;
-    const data: [number, number, number][] = [];
-
-    xDim.values.forEach((xv, xi) => {
-      yDim.values.forEach((yv, yi) => {
-        const pt = dev.points.find(
-          (p) =>
-            String(p[xDim.key as keyof Point]) === xv &&
-            String(p[yDim.key as keyof Point]) === yv,
-        );
-        const val = pt ? (pt as any)[metric] ?? 0 : 0;
-        data.push([xi, yi, val]);
-      });
+  const allValues: number[] = [];
+  series.forEach((dev) => {
+    dev.points.forEach((p) => {
+      const v = (p as any)[metric];
+      if (typeof v === "number" && v > 0) allValues.push(v);
     });
+  });
+  const minVal = allValues.length ? Math.min(...allValues) : 0;
+  const maxVal = allValues.length ? Math.max(...allValues) : 1;
 
-    return {
-      type: "bar3D",
-      name: devLabel,
-      data,
-      shading: "lambert",
-      barSize: series.length > 1 ? 12 : 18,
-      itemStyle: { color: PALETTE[devIdx % PALETTE.length], opacity: 0.85 },
-      emphasis: {
-        label: { show: true, fontSize: 11, color: "#fff", formatter: (p: any) => formatter(p.value[2]) },
-        itemStyle: { color: PALETTE[devIdx % PALETTE.length], opacity: 1 },
-      },
-    };
+  return (
+    <div className="col" style={{ gap: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)" }}>{title}</div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${Math.min(series.length, 3)}, minmax(0, 1fr))`,
+          gap: 12,
+        }}
+      >
+        {series.map((dev, devIdx) => (
+          <DeviceHeatmap
+            key={dev.device_id}
+            device={dev}
+            devColor={PALETTE[devIdx % PALETTE.length]}
+            xDim={xDim}
+            yDim={yDim}
+            metric={metric}
+            formatter={formatter}
+            min={minVal}
+            max={maxVal}
+            t={t}
+            title={title}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DeviceHeatmap({
+  device, devColor, xDim, yDim, metric, formatter, min, max, t, title,
+}: {
+  device: { model: string; brand: string; serial: string; points: Point[] };
+  devColor: string;
+  xDim: { key: DimKey; values: string[] };
+  yDim: { key: DimKey; values: string[] };
+  metric: string;
+  formatter: (v: number) => string;
+  min: number;
+  max: number;
+  t: (k: string) => string;
+  title: string;
+}) {
+  const devLabel = `${device.brand} ${device.model}`.trim() || device.serial;
+
+  const data: [number, number, number | "-"][] = [];
+  xDim.values.forEach((xv, xi) => {
+    yDim.values.forEach((yv, yi) => {
+      const pt = device.points.find(
+        (p) =>
+          String(p[xDim.key as keyof Point]) === xv &&
+          String(p[yDim.key as keyof Point]) === yv,
+      );
+      const val = pt ? (pt as any)[metric] : null;
+      data.push([xi, yi, typeof val === "number" && val > 0 ? val : "-"]);
+    });
   });
 
-  const option: any = {
+  const option = {
+    animation: false,
+    title: {
+      text: devLabel,
+      textStyle: { color: devColor, fontSize: 12, fontWeight: 500 },
+      left: "center",
+      top: 4,
+    },
     tooltip: {
+      position: "top",
+      backgroundColor: "#111a2e",
+      borderColor: "#233256",
+      textStyle: { color: "#e2e8f0", fontSize: 11 },
       formatter: (p: any) => {
         const xv = xDim.values[p.value[0]];
         const yv = yDim.values[p.value[1]];
-        return `<b>${p.seriesName}</b><br/>${dimLabel(t, xDim.key)}: ${xv}<br/>${dimLabel(t, yDim.key)}: ${yv}<br/>${title}: ${formatter(p.value[2])}`;
+        const v = p.value[2];
+        return `<b>${devLabel}</b><br/>${dimLabel(t, xDim.key)}: ${xv}<br/>${dimLabel(t, yDim.key)}: ${yv}<br/>${title}: ${v === "-" ? "—" : formatter(v)}`;
       },
     },
-    legend: {
-      bottom: 0,
-      textStyle: { color: "#94a3b8", fontSize: 11 },
-      data: series.map((s) => `${s.brand} ${s.model}`.trim() || s.serial),
-    },
-    xAxis3D: {
+    grid: { top: 36, bottom: 64, left: 64, right: 16 },
+    xAxis: {
       type: "category",
       data: xDim.values,
       name: dimLabel(t, xDim.key),
-      nameTextStyle: { color: "#cbd5e1", fontSize: 12 },
+      nameLocation: "middle",
+      nameGap: 28,
+      nameTextStyle: { color: "#cbd5e1", fontSize: 11, fontWeight: 500 },
+      axisLine: { lineStyle: { color: "#233256" } },
       axisLabel: { color: "#94a3b8", fontSize: 10 },
+      splitArea: { show: false },
     },
-    yAxis3D: {
+    yAxis: {
       type: "category",
       data: yDim.values,
       name: dimLabel(t, yDim.key),
-      nameTextStyle: { color: "#cbd5e1", fontSize: 12 },
+      nameLocation: "middle",
+      nameGap: 40,
+      nameRotate: 90,
+      nameTextStyle: { color: "#cbd5e1", fontSize: 11, fontWeight: 500 },
+      axisLine: { lineStyle: { color: "#233256" } },
       axisLabel: { color: "#94a3b8", fontSize: 10 },
+      splitArea: { show: false },
     },
-    zAxis3D: {
-      type: "value",
-      name: title,
-      nameTextStyle: { color: "#cbd5e1", fontSize: 11 },
-      axisLabel: { color: "#94a3b8", fontSize: 10, formatter: (v: number) => formatter(v) },
+    visualMap: {
+      min: min,
+      max: max,
+      calculable: false,
+      orient: "horizontal",
+      left: "center",
+      bottom: 4,
+      itemWidth: 12,
+      itemHeight: 80,
+      textStyle: { color: "#94a3b8", fontSize: 9 },
+      formatter: (v: number) => formatter(v),
+      inRange: { color: HEATMAP_COLORS },
     },
-    grid3D: {
-      boxWidth: 140,
-      boxHeight: 80,
-      boxDepth: 100,
-      viewControl: {
-        projection: "perspective",
-        alpha: 25,
-        beta: 40,
-        distance: 240,
-        autoRotate: false,
+    series: [
+      {
+        name: devLabel,
+        type: "heatmap",
+        data,
+        label: {
+          show: true,
+          fontSize: 9,
+          color: "#fff",
+          formatter: (p: any) => (p.value[2] === "-" ? "" : compactFormat(p.value[2], metric)),
+        },
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 8,
+            shadowColor: "rgba(0,0,0,0.5)",
+            borderColor: "#fff",
+            borderWidth: 1,
+          },
+        },
       },
-      light: {
-        main: { intensity: 1.2, shadow: true },
-        ambient: { intensity: 0.4 },
-      },
-      environment: "transparent",
-    },
-    series: bar3dSeries,
+    ],
   };
 
-  return (
-    <div>
-      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)", marginBottom: 4 }}>{title}</div>
-      <ReactECharts style={{ height: 420 }} option={option} notMerge />
-    </div>
-  );
+  return <ReactECharts style={{ height: 320, minWidth: 0 }} option={option} notMerge />;
+}
+
+function compactFormat(v: number, metric: string): string {
+  if (metric.includes("iops")) {
+    if (v >= 1000) return `${(v / 1000).toFixed(0)}k`;
+    return v.toFixed(0);
+  }
+  if (metric.includes("bw")) {
+    const mb = v / (1024 * 1024);
+    if (mb >= 1024) return `${(mb / 1024).toFixed(1)}G`;
+    return `${mb.toFixed(0)}M`;
+  }
+  if (metric.includes("latency") || metric.includes("clat")) {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}ms`;
+    if (v >= 1000) return `${(v / 1000).toFixed(0)}μs`;
+    return `${v.toFixed(0)}ns`;
+  }
+  return String(v);
 }
 
 function Chart2D({
