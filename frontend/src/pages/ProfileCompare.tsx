@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
+import "echarts-gl";
 
 import { api, getToken, type Device } from "@/api";
 import { humanBps, humanIops, humanNs } from "@/lib/format";
 import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
 
 const PALETTE = ["#60a5fa", "#f4a340", "#4ade80", "#c084fc", "#f87171", "#22d3ee", "#facc15", "#a78bfa"];
-const LINE_TYPES = ["solid", "dashed", "dotted"] as const;
 
 interface Point {
   raw_name: string;
@@ -186,8 +186,9 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
 
   if (dims.length === 0) return null;
 
+  const is3D = dims.length >= 2;
   const xDim = dims[0];
-  const groupDim = dims[1];
+  const yDim = dims[1];
 
   const hasRead = allPoints.some((p) => p.read_iops && p.read_iops > 0);
   const hasWrite = allPoints.some((p) => p.write_iops && p.write_iops > 0);
@@ -204,124 +205,192 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
   return (
     <div className="card">
       <h3>{groupLabel}</h3>
-      {groupDim && (
-        <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
-          {t("profileCompare.dimensionsHint", {
-            x: dimLabel(t as any, xDim.key),
-            series: dimLabel(t as any, groupDim.key),
-          })}
-        </div>
-      )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(480px, 1fr))", gap: 16 }}>
-        {charts.map((chart) => (
-          <Multi2DChart
-            key={chart.metric}
-            title={chart.title}
-            xDim={xDim}
-            groupDim={groupDim}
-            metric={chart.metric}
-            formatter={chart.formatter}
-            series={groupSeries}
-            t={t as any}
-          />
-        ))}
+      <div style={{ display: "grid", gridTemplateColumns: is3D ? "1fr" : "repeat(auto-fit, minmax(480px, 1fr))", gap: 16 }}>
+        {charts.map((chart) =>
+          is3D ? (
+            <Chart3D
+              key={chart.metric}
+              title={chart.title}
+              xDim={xDim}
+              yDim={yDim}
+              metric={chart.metric}
+              formatter={chart.formatter}
+              series={groupSeries}
+              t={t as any}
+            />
+          ) : (
+            <Chart2D
+              key={chart.metric}
+              title={chart.title}
+              xDim={xDim}
+              metric={chart.metric}
+              formatter={chart.formatter}
+              series={groupSeries}
+              t={t as any}
+            />
+          ),
+        )}
       </div>
     </div>
   );
 }
 
-function Multi2DChart({
-  title, xDim, groupDim, metric, formatter, series, t,
+function Chart3D({
+  title, xDim, yDim, metric, formatter, series, t,
 }: {
   title: string;
   xDim: { key: DimKey; values: string[] };
-  groupDim: { key: DimKey; values: string[] } | undefined;
+  yDim: { key: DimKey; values: string[] };
   metric: string;
   formatter: (v: number) => string;
-  series: Series[];
+  series: { model: string; brand: string; serial: string; points: Point[] }[];
   t: (k: string) => string;
 }) {
-  // Build series. If groupDim exists: for each device × each groupDim value,
-  // emit one line. Color = device, line type = groupDim value.
-  // If no groupDim: one line per device.
-  const echartsSeries: any[] = [];
-
-  series.forEach((dev, devIdx) => {
-    const color = PALETTE[devIdx % PALETTE.length];
+  const bar3dSeries: any[] = series.map((dev, devIdx) => {
     const devLabel = `${dev.brand} ${dev.model}`.trim() || dev.serial;
+    const data: [number, number, number][] = [];
 
-    if (groupDim) {
-      groupDim.values.forEach((gv, gIdx) => {
-        const gLabel = dimLabel(t as any, groupDim.key);
-        const data = xDim.values.map((xv) => {
-          const pt = dev.points.find((p) =>
+    xDim.values.forEach((xv, xi) => {
+      yDim.values.forEach((yv, yi) => {
+        const pt = dev.points.find(
+          (p) =>
             String(p[xDim.key as keyof Point]) === xv &&
-            String(p[groupDim.key as keyof Point]) === gv
-          );
-          return pt ? (pt as any)[metric] ?? null : null;
-        });
-        echartsSeries.push({
-          name: `${devLabel} · ${gLabel}=${gv}`,
-          type: "line",
-          smooth: false,
-          symbol: "circle",
-          symbolSize: 4,
-          lineStyle: { width: 1.5, type: LINE_TYPES[gIdx % LINE_TYPES.length] },
-          itemStyle: { color },
-          data,
-        });
+            String(p[yDim.key as keyof Point]) === yv,
+        );
+        const val = pt ? (pt as any)[metric] ?? 0 : 0;
+        data.push([xi, yi, val]);
       });
-    } else {
-      const data = xDim.values.map((xv) => {
-        const pt = dev.points.find((p) => String(p[xDim.key as keyof Point]) === xv);
-        return pt ? (pt as any)[metric] ?? null : null;
-      });
-      echartsSeries.push({
-        name: devLabel,
-        type: "line",
-        smooth: false,
-        symbol: "circle",
-        symbolSize: 5,
-        lineStyle: { width: 2 },
-        itemStyle: { color },
-        data,
-      });
-    }
+    });
+
+    return {
+      type: "bar3D",
+      name: devLabel,
+      data,
+      shading: "lambert",
+      barSize: series.length > 1 ? 12 : 18,
+      itemStyle: { color: PALETTE[devIdx % PALETTE.length], opacity: 0.85 },
+      emphasis: {
+        label: { show: true, fontSize: 11, color: "#fff", formatter: (p: any) => formatter(p.value[2]) },
+        itemStyle: { color: PALETTE[devIdx % PALETTE.length], opacity: 1 },
+      },
+    };
   });
 
-  const xAxisName = dimLabel(t as any, xDim.key);
-  const yAxisName = title;
+  const option: any = {
+    tooltip: {
+      formatter: (p: any) => {
+        const xv = xDim.values[p.value[0]];
+        const yv = yDim.values[p.value[1]];
+        return `<b>${p.seriesName}</b><br/>${dimLabel(t, xDim.key)}: ${xv}<br/>${dimLabel(t, yDim.key)}: ${yv}<br/>${title}: ${formatter(p.value[2])}`;
+      },
+    },
+    legend: {
+      bottom: 0,
+      textStyle: { color: "#94a3b8", fontSize: 11 },
+      data: series.map((s) => `${s.brand} ${s.model}`.trim() || s.serial),
+    },
+    xAxis3D: {
+      type: "category",
+      data: xDim.values,
+      name: dimLabel(t, xDim.key),
+      nameTextStyle: { color: "#cbd5e1", fontSize: 12 },
+      axisLabel: { color: "#94a3b8", fontSize: 10 },
+    },
+    yAxis3D: {
+      type: "category",
+      data: yDim.values,
+      name: dimLabel(t, yDim.key),
+      nameTextStyle: { color: "#cbd5e1", fontSize: 12 },
+      axisLabel: { color: "#94a3b8", fontSize: 10 },
+    },
+    zAxis3D: {
+      type: "value",
+      name: title,
+      nameTextStyle: { color: "#cbd5e1", fontSize: 11 },
+      axisLabel: { color: "#94a3b8", fontSize: 10, formatter: (v: number) => formatter(v) },
+    },
+    grid3D: {
+      boxWidth: 140,
+      boxHeight: 80,
+      boxDepth: 100,
+      viewControl: {
+        projection: "perspective",
+        alpha: 25,
+        beta: 40,
+        distance: 240,
+        autoRotate: false,
+      },
+      light: {
+        main: { intensity: 1.2, shadow: true },
+        ambient: { intensity: 0.4 },
+      },
+      environment: "transparent",
+    },
+    series: bar3dSeries,
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)", marginBottom: 4 }}>{title}</div>
+      <ReactECharts style={{ height: 420 }} option={option} notMerge />
+    </div>
+  );
+}
+
+function Chart2D({
+  title, xDim, metric, formatter, series, t,
+}: {
+  title: string;
+  xDim: { key: DimKey; values: string[] };
+  metric: string;
+  formatter: (v: number) => string;
+  series: { model: string; brand: string; serial: string; points: Point[] }[];
+  t: (k: string) => string;
+}) {
+  const echartsSeries = series.map((dev, devIdx) => {
+    const devLabel = `${dev.brand} ${dev.model}`.trim() || dev.serial;
+    const data = xDim.values.map((xv) => {
+      const pt = dev.points.find((p) => String(p[xDim.key as keyof Point]) === xv);
+      return pt ? (pt as any)[metric] ?? null : null;
+    });
+    return {
+      name: devLabel,
+      type: "line",
+      smooth: false,
+      symbol: "circle",
+      symbolSize: 5,
+      lineStyle: { width: 2 },
+      itemStyle: { color: PALETTE[devIdx % PALETTE.length] },
+      data,
+    };
+  });
 
   const option = {
     animation: false,
     title: { text: title, textStyle: { color: "var(--fg)", fontSize: 13 }, left: "center", top: 4 },
     tooltip: {
-      trigger: "axis",
+      trigger: "axis" as const,
       backgroundColor: "#111a2e",
       borderColor: "#233256",
       textStyle: { color: "#e2e8f0", fontSize: 11 },
-      valueFormatter: (v: number | null) => v == null ? "—" : formatter(v),
+      valueFormatter: (v: number | null) => (v == null ? "—" : formatter(v)),
     },
-    legend: {
-      bottom: 0,
-      textStyle: { color: "#94a3b8", fontSize: 10 },
-      type: "scroll",
-    },
-    grid: { top: 50, bottom: groupDim ? 80 : 60, left: 80, right: 24 },
+    legend: { bottom: 0, textStyle: { color: "#94a3b8", fontSize: 10 }, type: "scroll" },
+    grid: { top: 50, bottom: 60, left: 80, right: 24 },
     xAxis: {
-      type: "category",
+      type: "category" as const,
       data: xDim.values,
-      name: xAxisName,
-      nameLocation: "middle",
+      name: dimLabel(t, xDim.key),
+      nameLocation: "middle" as const,
       nameGap: 30,
       nameTextStyle: { color: "#cbd5e1", fontSize: 12, fontWeight: 500 },
       axisLine: { lineStyle: { color: "#233256" } },
       axisLabel: { color: "#94a3b8", fontSize: 11 },
     },
     yAxis: {
-      type: "value",
-      name: yAxisName,
-      nameLocation: "middle",
+      type: "value" as const,
+      name: title,
+      nameLocation: "middle" as const,
       nameGap: 60,
       nameRotate: 90,
       nameTextStyle: { color: "#cbd5e1", fontSize: 12, fontWeight: 500 },
@@ -332,5 +401,5 @@ function Multi2DChart({
     series: echartsSeries,
   };
 
-  return <ReactECharts style={{ height: groupDim ? 360 : 300 }} option={option} notMerge />;
+  return <ReactECharts style={{ height: 300 }} option={option} notMerge />;
 }

@@ -7,6 +7,20 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.9.0 — 2026-06-09
+
+### Changed
+- **Profile Compare uses 3D bar charts** when two dimensions vary
+  (e.g. Queue Depth × Threads). The X-axis and Y-axis represent the
+  two categorical dimensions, and the Z-axis (bar height) represents
+  the performance metric. Each device is a separate colored bar3D
+  series. This replaces the previous 2D multi-line approach (solid /
+  dashed / dotted) which was hard to read.
+- When only one dimension varies, the page still uses clean 2D line
+  charts with proper axis labels.
+- Added `echarts-gl` dependency for WebGL-accelerated 3D rendering
+  (interactive rotation, zoom, pan on the 3D charts).
+
 ## 1.8.0 — 2026-06-09
 
 ### Changed
