@@ -349,7 +349,11 @@
     "blockSize": "Block Size",
     "threads": "线程数",
     "queueDepth": "队列深度",
-    "phase": "阶段"
+    "phase": "阶段",
+    "patternRead": "顺序读取",
+    "patternWrite": "顺序写入",
+    "patternMixed": "混合读写",
+    "dimensionsHint": "X 轴：{{x}}。每条曲线代表不同的 {{series}}（用线型区分）。"
   },
   "admin": {
     "usersTitle": "用户管理",

@@ -349,7 +349,11 @@
     "blockSize": "Block Size",
     "threads": "Threads",
     "queueDepth": "Queue Depth",
-    "phase": "Phase"
+    "phase": "Phase",
+    "patternRead": "Sequential Read",
+    "patternWrite": "Sequential Write",
+    "patternMixed": "Mixed",
+    "dimensionsHint": "X-axis: {{x}}. Each line represents a different {{series}} value (line style varies)."
   },
   "admin": {
     "usersTitle": "User administration",

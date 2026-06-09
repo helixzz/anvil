@@ -7,6 +7,143 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.8.0 — 2026-06-09
+
+### Changed
+- **Profile Compare charts now render all data dimensions.** Previously,
+  when a profile swept two dimensions (e.g. `sr_deep_sweep` varies QD ×
+  threads), the X-axis only showed unique values of one dimension and
+  silently dropped the other. Each chart now picks the primary varying
+  dimension as the X-axis and emits one line per device × secondary
+  dimension value (line style differentiates secondary values, color
+  differentiates devices).
+- Charts now display X-axis and Y-axis titles describing the dimension
+  and metric, plus an explanatory hint above each group when two
+  dimensions are present.
+- Group titles for dynamic SR groups (`sr_4k_read`, `sr_128k_write`,
+  etc.) are now formatted as e.g. "4K Sequential Read" instead of the
+  raw key.
+
+## 1.7.2 — 2026-06-09
+
+### Changed
+- Full i18n coverage for the Profile Compare page (25 new keys in both
+  English and Chinese; total 333 keys per locale, zero drift).
+
+## 1.7.1 — 2026-06-09
+
+### Fixed
+- Profile Compare device picker now lists all historical devices, not
+  just currently testable ones (Anvil's host swaps drives frequently).
+- Fixed bearer token lookup — page now uses the canonical `getToken()`
+  helper, matching the rest of the app.
+
+## 1.7.0 — 2026-06-09
+
+### Added
+- **Profile performance comparison page** (`/profile-compare`). New
+  endpoint `GET /api/profile-compare` returns multi-dimensional run
+  data (block size × queue depth × threads × pattern) for any profile
+  across any number of devices. Frontend renders ECharts line charts
+  grouped by phase family (sequential read, random write, etc.) with
+  dimension parsers for `ezfio`, `sr_deep_sweep`, `sr_four_corners`,
+  SNIA, and generic naming conventions.
+
+## 1.6.5 — 2026-06-09
+
+### Fixed
+- ADFS SSO: relaxed `wantMessagesSigned` to false. ADFS only signs the
+  inner `<Assertion>`, not the outer `<Response>`.
+
+## 1.6.4 — 2026-06-09
+
+### Fixed
+- ADFS SSO: `_make_request()` now constructs request context from
+  `sp_acs_url` instead of hardcoded `localhost:8080`, fixing
+  destination/audience mismatches behind a reverse proxy.
+
+## 1.6.3 — 2026-06-09
+
+### Fixed
+- ADFS SSO: ACS endpoint now reads `SAMLResponse` from the POST body
+  via `Form()` instead of `Query()`. Added `python-multipart`
+  dependency.
+
+## 1.6.2 — 2026-06-09
+
+### Fixed
+- ADFS SSO: disable TLS verify on IdP metadata fetch (enterprise CA
+  chain not present in the container's trust store; LAN-only
+  deployment).
+
+## 1.6.1 — 2026-06-09
+
+### Fixed
+- ADFS SSO: replaced nonexistent
+  `OneLogin_Saml2_Settings._load_idp_metadata_from_xml` with
+  `OneLogin_Saml2_IdPMetadataParser.parse()`.
+
+## 1.6.0 — 2026-06-08
+
+### Added
+- **HTTPS support** via `scripts/enable-tls.sh` and
+  `frontend/nginx-tls.conf`. Certs go in `deploy/tls/` and are mounted
+  into the web container.
+- **ADFS integration guide** at `docs/operator-guide/adfs.md`
+  describing Relying Party Trust setup, claim rules, and group→role
+  mapping.
+
+### Fixed
+- `resolve_sso_role()` now returns `None` when no group mappings are
+  configured, signalling callers to preserve the user's existing role.
+  This prevents admin promotions from being reverted on every SSO
+  re-login.
+
+## 1.5.5 — 2026-06-08
+
+### Fixed
+- PCIe-degraded dashboard now excludes devices with
+  `current_device_path IS NULL` (i.e. removed since last rescan).
+
+## 1.5.4 — 2026-06-08
+
+### Fixed
+- `rescan` now clears `current_device_path` on devices that are
+  no longer present, fixing stale device records after hot-swap.
+
+## 1.5.3 — 2026-06-08
+
+### Fixed
+- Batch run submission committed the run records *after* enqueueing,
+  causing transient "queued" rows that the worker couldn't load. Commit
+  now happens before queue submission.
+
+## 1.5.2 — 2026-06-08
+
+### Changed
+- New Run page: replaced the device pill list with the standard
+  `MultiSelect` dropdown component used elsewhere.
+
+## 1.5.1 — 2026-06-08
+
+### Added
+- Batch task submission on New Run page: multi-select devices and
+  multi-select profiles, expanding to one run per (device × profile)
+  pair.
+
+## 1.5.0 — 2026-06-08
+
+### Added
+- Three new benchmark profiles (13 total):
+  - `sr_four_corners` — 4K random read/write × seq read/write at QD=1
+    and QD=32, suited for headline numbers.
+  - `sr_deep_sweep` — full SNIA-style sweep across BS ∈ {4K, 16K, 64K,
+    128K} × QD ∈ {1,2,4,8,16,32} × threads ∈ {1,2,4,8} for read and
+    write.
+  - `ezfio_comprehensive` — ezfio's classic 8-group sweep covering
+    sequential and random across 7 block sizes plus the 4K stability
+    long-run.
+
 ## 1.4.6 — 2026-04-27
 
 ### Added

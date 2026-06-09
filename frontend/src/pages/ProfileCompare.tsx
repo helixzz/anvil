@@ -8,6 +8,7 @@ import { humanBps, humanIops, humanNs } from "@/lib/format";
 import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
 
 const PALETTE = ["#60a5fa", "#f4a340", "#4ade80", "#c084fc", "#f87171", "#22d3ee", "#facc15", "#a78bfa"];
+const LINE_TYPES = ["solid", "dashed", "dotted"] as const;
 
 interface Point {
   raw_name: string;
@@ -37,6 +38,20 @@ interface CompareResult {
   profile_name: string;
   series: Series[];
   groups: string[];
+}
+
+type DimKey = "bs_label" | "qd" | "threads";
+
+const BS_NUMERIC: Record<string, number> = {
+  "512b": 0.5, "1k": 1, "2k": 2, "4k": 4, "8k": 8, "16k": 16,
+  "32k": 32, "64k": 64, "128k": 128, "1m": 1024,
+};
+
+function sortDim(values: string[], key: DimKey): string[] {
+  if (key === "bs_label") {
+    return [...values].sort((a, b) => (BS_NUMERIC[a] ?? 0) - (BS_NUMERIC[b] ?? 0));
+  }
+  return [...values].sort((a, b) => Number(a) - Number(b));
 }
 
 export default function ProfileCompare() {
@@ -74,7 +89,6 @@ export default function ProfileCompare() {
       setLoading(false);
     }
   }
-
 
   return (
     <div className="col" style={{ gap: 20 }}>
@@ -130,27 +144,53 @@ export default function ProfileCompare() {
   );
 }
 
+function dimLabel(t: (k: string) => string, k: DimKey): string {
+  if (k === "bs_label") return t("profileCompare.blockSize");
+  if (k === "threads") return t("profileCompare.threads");
+  return t("profileCompare.queueDepth");
+}
+
+function formatGroupLabel(group: string, t: (k: string, fallback?: string) => string): string {
+  if (/^g[0-9]+$/.test(group)) return t(`profileCompare.${group}` as any, group);
+  const m = group.match(/^sr_([0-9]+[kKmM]?b?)_(read|write|mixed)$/i);
+  if (m) {
+    const bs = m[1].toUpperCase();
+    const pat = m[2].toLowerCase();
+    const patLabel = pat === "read"
+      ? t("profileCompare.patternRead", "Sequential Read")
+      : pat === "write"
+        ? t("profileCompare.patternWrite", "Sequential Write")
+        : t("profileCompare.patternMixed", "Mixed");
+    return `${bs} ${patLabel}`;
+  }
+  return group.split("_").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
+}
+
 function GroupChart({ group, series }: { group: string; series: Series[] }) {
   const { t } = useTranslation();
-  const groupPoints = series.map((s) => ({
-    ...s,
-    points: s.points.filter((p) => p.group === group),
-  })).filter((s) => s.points.length > 0);
+  const groupSeries = series
+    .map((s) => ({ ...s, points: s.points.filter((p) => p.group === group) }))
+    .filter((s) => s.points.length > 0);
 
-  if (groupPoints.length === 0) return null;
+  if (groupSeries.length === 0) return null;
 
-  const firstPoints = groupPoints[0].points;
-  const hasBS = new Set(firstPoints.map((p) => p.bs_label)).size > 1;
-  const hasThreads = new Set(firstPoints.map((p) => p.threads)).size > 1;
-  const hasQD = new Set(firstPoints.map((p) => p.qd)).size > 1;
+  const allPoints = groupSeries.flatMap((s) => s.points);
+  const bsValues = sortDim([...new Set(allPoints.map((p) => p.bs_label))], "bs_label");
+  const qdValues = sortDim([...new Set(allPoints.map((p) => String(p.qd)))], "qd");
+  const threadValues = sortDim([...new Set(allPoints.map((p) => String(p.threads)))], "threads");
 
-  const xAxis = hasBS ? "bs_label" : hasThreads ? "threads" : hasQD ? "qd" : "raw_name";
-  const xLabel = hasBS ? t("profileCompare.blockSize") : hasThreads ? t("profileCompare.threads") : hasQD ? t("profileCompare.queueDepth") : t("profileCompare.phase");
+  const dims: { key: DimKey; values: string[] }[] = [];
+  if (bsValues.length > 1) dims.push({ key: "bs_label", values: bsValues });
+  if (qdValues.length > 1) dims.push({ key: "qd", values: qdValues });
+  if (threadValues.length > 1) dims.push({ key: "threads", values: threadValues });
 
-  const xValues = [...new Set(firstPoints.map((p) => String(p[xAxis as keyof Point])))];
+  if (dims.length === 0) return null;
 
-  const hasRead = firstPoints.some((p) => p.read_iops && p.read_iops > 0);
-  const hasWrite = firstPoints.some((p) => p.write_iops && p.write_iops > 0);
+  const xDim = dims[0];
+  const groupDim = dims[1];
+
+  const hasRead = allPoints.some((p) => p.read_iops && p.read_iops > 0);
+  const hasWrite = allPoints.some((p) => p.write_iops && p.write_iops > 0);
 
   const charts: { title: string; metric: string; formatter: (v: number) => string }[] = [];
   if (hasRead) charts.push({ title: t("profileCompare.readIops"), metric: "read_iops", formatter: humanIops });
@@ -159,22 +199,30 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
   if (hasWrite) charts.push({ title: t("profileCompare.writeBw"), metric: "write_bw_bytes", formatter: humanBps });
   if (hasRead) charts.push({ title: t("profileCompare.readLatency"), metric: "read_clat_mean_ns", formatter: humanNs });
 
-  const groupLabel = t(`profileCompare.${group}` as any, group);
+  const groupLabel = formatGroupLabel(group, t as any);
 
   return (
     <div className="card">
       <h3>{groupLabel}</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(450px, 1fr))", gap: 16 }}>
+      {groupDim && (
+        <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
+          {t("profileCompare.dimensionsHint", {
+            x: dimLabel(t as any, xDim.key),
+            series: dimLabel(t as any, groupDim.key),
+          })}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(480px, 1fr))", gap: 16 }}>
         {charts.map((chart) => (
-          <LineChart
+          <Multi2DChart
             key={chart.metric}
             title={chart.title}
-            xLabel={xLabel}
-            xValues={xValues}
-            xKey={xAxis}
+            xDim={xDim}
+            groupDim={groupDim}
             metric={chart.metric}
             formatter={chart.formatter}
-            series={groupPoints}
+            series={groupSeries}
+            t={t as any}
           />
         ))}
       </div>
@@ -182,35 +230,107 @@ function GroupChart({ group, series }: { group: string; series: Series[] }) {
   );
 }
 
-function LineChart({
-  title, xLabel, xValues, xKey, metric, formatter, series,
+function Multi2DChart({
+  title, xDim, groupDim, metric, formatter, series, t,
 }: {
-  title: string; xLabel: string; xValues: string[];
-  xKey: string; metric: string; formatter: (v: number) => string;
-  series: { model: string; brand: string; serial: string; points: Point[] }[];
+  title: string;
+  xDim: { key: DimKey; values: string[] };
+  groupDim: { key: DimKey; values: string[] } | undefined;
+  metric: string;
+  formatter: (v: number) => string;
+  series: Series[];
+  t: (k: string) => string;
 }) {
+  // Build series. If groupDim exists: for each device × each groupDim value,
+  // emit one line. Color = device, line type = groupDim value.
+  // If no groupDim: one line per device.
+  const echartsSeries: any[] = [];
+
+  series.forEach((dev, devIdx) => {
+    const color = PALETTE[devIdx % PALETTE.length];
+    const devLabel = `${dev.brand} ${dev.model}`.trim() || dev.serial;
+
+    if (groupDim) {
+      groupDim.values.forEach((gv, gIdx) => {
+        const gLabel = dimLabel(t as any, groupDim.key);
+        const data = xDim.values.map((xv) => {
+          const pt = dev.points.find((p) =>
+            String(p[xDim.key as keyof Point]) === xv &&
+            String(p[groupDim.key as keyof Point]) === gv
+          );
+          return pt ? (pt as any)[metric] ?? null : null;
+        });
+        echartsSeries.push({
+          name: `${devLabel} · ${gLabel}=${gv}`,
+          type: "line",
+          smooth: false,
+          symbol: "circle",
+          symbolSize: 4,
+          lineStyle: { width: 1.5, type: LINE_TYPES[gIdx % LINE_TYPES.length] },
+          itemStyle: { color },
+          data,
+        });
+      });
+    } else {
+      const data = xDim.values.map((xv) => {
+        const pt = dev.points.find((p) => String(p[xDim.key as keyof Point]) === xv);
+        return pt ? (pt as any)[metric] ?? null : null;
+      });
+      echartsSeries.push({
+        name: devLabel,
+        type: "line",
+        smooth: false,
+        symbol: "circle",
+        symbolSize: 5,
+        lineStyle: { width: 2 },
+        itemStyle: { color },
+        data,
+      });
+    }
+  });
+
+  const xAxisName = dimLabel(t as any, xDim.key);
+  const yAxisName = title;
+
   const option = {
     animation: false,
     title: { text: title, textStyle: { color: "var(--fg)", fontSize: 13 }, left: "center", top: 4 },
-    tooltip: { trigger: "axis", backgroundColor: "#111a2e", borderColor: "#233256", textStyle: { color: "#e2e8f0" } },
-    legend: { bottom: 0, textStyle: { color: "#94a3b8", fontSize: 10 }, type: "scroll" },
-    grid: { top: 40, bottom: 50, left: 70, right: 20 },
-    xAxis: { type: "category", data: xValues, name: xLabel, nameLocation: "center", nameGap: 30, axisLine: { lineStyle: { color: "#233256" } }, axisLabel: { color: "#94a3b8" } },
-    yAxis: { type: "value", axisLine: { lineStyle: { color: "#233256" } }, axisLabel: { color: "#94a3b8", formatter: (v: number) => formatter(v) }, splitLine: { lineStyle: { color: "#1a2440" } } },
-    series: series.map((s, i) => ({
-      name: `${s.brand} ${s.model}`.trim(),
-      type: "line",
-      smooth: true,
-      symbol: "circle",
-      symbolSize: 5,
-      lineStyle: { width: 2 },
-      itemStyle: { color: PALETTE[i % PALETTE.length] },
-      data: xValues.map((x) => {
-        const pt = s.points.find((p) => String(p[xKey as keyof Point]) === x);
-        return pt ? (pt as any)[metric] ?? null : null;
-      }),
-    })),
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "#111a2e",
+      borderColor: "#233256",
+      textStyle: { color: "#e2e8f0", fontSize: 11 },
+      valueFormatter: (v: number | null) => v == null ? "—" : formatter(v),
+    },
+    legend: {
+      bottom: 0,
+      textStyle: { color: "#94a3b8", fontSize: 10 },
+      type: "scroll",
+    },
+    grid: { top: 50, bottom: groupDim ? 80 : 60, left: 80, right: 24 },
+    xAxis: {
+      type: "category",
+      data: xDim.values,
+      name: xAxisName,
+      nameLocation: "middle",
+      nameGap: 30,
+      nameTextStyle: { color: "#cbd5e1", fontSize: 12, fontWeight: 500 },
+      axisLine: { lineStyle: { color: "#233256" } },
+      axisLabel: { color: "#94a3b8", fontSize: 11 },
+    },
+    yAxis: {
+      type: "value",
+      name: yAxisName,
+      nameLocation: "middle",
+      nameGap: 60,
+      nameRotate: 90,
+      nameTextStyle: { color: "#cbd5e1", fontSize: 12, fontWeight: 500 },
+      axisLine: { lineStyle: { color: "#233256" } },
+      axisLabel: { color: "#94a3b8", formatter: (v: number) => formatter(v), fontSize: 11 },
+      splitLine: { lineStyle: { color: "#1a2440" } },
+    },
+    series: echartsSeries,
   };
 
-  return <ReactECharts style={{ height: 280 }} option={option} notMerge />;
+  return <ReactECharts style={{ height: groupDim ? 360 : 300 }} option={option} notMerge />;
 }
