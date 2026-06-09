@@ -383,7 +383,6 @@ function buildSurfaceQuads(
   const nx = xLabels.length;
   const ny = yLabels.length;
   const baseFill = dev.color;
-  const sideFill = lighten(dev.color, 0.55);
 
   function project4(corners: Vec3[]): { pts: Vec2[]; tCorners: Vec3[] } {
     const tCorners = corners.map(transform);
@@ -428,35 +427,6 @@ function buildSurfaceQuads(
         hover: { deviceName: dev.name, xv: xLabels[xi], yv: yLabels[yi], value: v00 },
       });
     }
-  }
-
-  for (let xi = 0; xi < nx - 1; xi++) {
-    const v0 = dev.matrix[xi]?.[0];
-    const v1 = dev.matrix[xi + 1]?.[0];
-    if (v0 == null || v1 == null) continue;
-    const corners = [
-      dataToWorld(xi, 0, v0),
-      dataToWorld(xi + 1, 0, v1),
-      dataToWorld(xi + 1, 0, 0),
-      dataToWorld(xi, 0, 0),
-    ];
-    const { pts, tCorners } = project4(corners);
-    const depth = Math.min(tCorners[0].z, tCorners[1].z, tCorners[2].z, tCorners[3].z);
-    out.push({ pts, depth, fill: sideFill, stroke: sideFill, opacity: 0.7 });
-  }
-  for (let yi = 0; yi < ny - 1; yi++) {
-    const v0 = dev.matrix[0]?.[yi];
-    const v1 = dev.matrix[0]?.[yi + 1];
-    if (v0 == null || v1 == null) continue;
-    const corners = [
-      dataToWorld(0, yi, v0),
-      dataToWorld(0, yi + 1, v1),
-      dataToWorld(0, yi + 1, 0),
-      dataToWorld(0, yi, 0),
-    ];
-    const { pts, tCorners } = project4(corners);
-    const depth = Math.min(tCorners[0].z, tCorners[1].z, tCorners[2].z, tCorners[3].z);
-    out.push({ pts, depth, fill: sideFill, stroke: sideFill, opacity: 0.7 });
   }
 
   return out;

@@ -7,6 +7,17 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.10.4 — 2026-06-09
+
+### Changed
+- 3D Profile Compare: removed the vertical "side walls" that were
+  rendered along the front and left edges of each device's surface.
+  When multiple devices were overlaid, each one drew its own wall at
+  the same X=first-data-column position, creating visual clutter
+  (multiple translucent rectangles stacking at the X=1 edge). Now
+  each device renders as a clean surface only, with no extra walls,
+  matching what a contour/surface plot should look like.
+
 ## 1.10.3 — 2026-06-09
 
 ### Fixed
