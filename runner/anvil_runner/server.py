@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import json
+import os
+import platform
+import socket
+import ssl
 from pathlib import Path
 from typing import Any
 
 import structlog
 
+from anvil_runner import __version__
 from anvil_runner.devices import lsblk_json, nvme_list, nvme_smart, read_smart, smartctl_all
 from anvil_runner.discovery import discover as discover_devices
 from anvil_runner.env import environment_report
@@ -22,9 +28,77 @@ THERMAL_ABORT_THRESHOLD_C = 75
 THERMAL_ABORT_CONSECUTIVE = 6
 
 
-async def run_server(socket_path: Path, simulation: bool = False) -> asyncio.AbstractServer:
-    runner = FioRunner(simulation=simulation)
+def host_info() -> dict[str, Any]:
+    """Describe the machine this runner executes on.
 
+    Reported through `ping` so the API records the *test host's* platform on
+    each run (not the API container's), and so operators can tell runner
+    hosts apart in the UI.
+    """
+    info: dict[str, Any] = {
+        "hostname": socket.gethostname(),
+        "platform": platform.platform(),
+        "kernel": platform.release(),
+        "architecture": platform.machine(),
+        "python": platform.python_version(),
+        "runner_version": __version__,
+        "cpu_count": os.cpu_count(),
+    }
+    with contextlib.suppress(OSError):
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.startswith("model name"):
+                info["cpu_model"] = line.split(":", 1)[1].strip()
+                break
+    with contextlib.suppress(OSError, ValueError, IndexError):
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemTotal:"):
+                info["mem_total_bytes"] = int(line.split()[1]) * 1024
+                break
+    return info
+
+
+async def run_server(
+    socket_path: Path | None,
+    simulation: bool = False,
+    *,
+    listen: tuple[str, int] | None = None,
+    ssl_context: ssl.SSLContext | None = None,
+    token: str | None = None,
+) -> list[asyncio.AbstractServer]:
+    """Start the RPC listeners.
+
+    - `socket_path`: local unix socket (trusted via filesystem permissions,
+      no token). Used by the co-located API container.
+    - `listen`: TCP `(host, port)` for remote APIs. Requires `token`; every
+      request must carry it. `ssl_context` should always be set in
+      production — the API pins the certificate's SHA-256 fingerprint.
+    """
+    if listen is not None and not token:
+        raise ValueError("a token is required when listening on TCP")
+    runner = FioRunner(simulation=simulation)
+    bench_lock = asyncio.Lock()
+    servers: list[asyncio.AbstractServer] = []
+    if socket_path is not None:
+        servers.append(await asyncio.start_unix_server(
+            _make_handler(runner, bench_lock, simulation, required_token=None),
+            path=str(socket_path),
+        ))
+    if listen is not None:
+        servers.append(await asyncio.start_server(
+            _make_handler(runner, bench_lock, simulation, required_token=token),
+            host=listen[0],
+            port=listen[1],
+            ssl=ssl_context,
+        ))
+    return servers
+
+
+def _make_handler(
+    runner: FioRunner,
+    bench_lock: asyncio.Lock,
+    simulation: bool,
+    required_token: str | None,
+) -> Any:
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             line = await reader.readline()
@@ -41,12 +115,28 @@ async def run_server(socket_path: Path, simulation: bool = False) -> asyncio.Abs
             params = request.get("params") or {}
             req_id = request.get("id")
 
+            if required_token is not None:
+                supplied = request.get("token")
+                if not isinstance(supplied, str) or not hmac.compare_digest(
+                    supplied.encode(), required_token.encode()
+                ):
+                    peer = writer.get_extra_info("peername")
+                    log.warning("rpc_unauthorized", method=method, peer=str(peer))
+                    writer.write(json.dumps(
+                        {"id": req_id, "error": "unauthorized"}
+                    ).encode() + b"\n")
+                    await writer.drain()
+                    return
+
             log.info("rpc_call", method=method, id=req_id)
 
             if method == "ping":
-                writer.write(json.dumps(
-                    {"id": req_id, "result": {"ok": True, "simulation": simulation}}
-                ).encode() + b"\n")
+                writer.write(json.dumps({"id": req_id, "result": {
+                    "ok": True,
+                    "simulation": simulation,
+                    "busy": bench_lock.locked(),
+                    "host": host_info(),
+                }}).encode() + b"\n")
                 await writer.drain()
                 return
 
@@ -104,7 +194,14 @@ async def run_server(socket_path: Path, simulation: bool = False) -> asyncio.Abs
                 return
 
             if method == "run_benchmark":
-                await _run_benchmark_stream(runner, params, writer)
+                if bench_lock.locked():
+                    writer.write(json.dumps({"event": "run_failed", "payload": {
+                        "error": "runner busy: another benchmark is already running on this host",
+                    }}).encode() + b"\n")
+                    await writer.drain()
+                    return
+                async with bench_lock:
+                    await _run_benchmark_stream(runner, params, writer)
                 return
 
             writer.write(json.dumps(
@@ -121,7 +218,7 @@ async def run_server(socket_path: Path, simulation: bool = False) -> asyncio.Abs
             with contextlib.suppress(Exception):
                 await writer.wait_closed()
 
-    return await asyncio.start_unix_server(handle, path=str(socket_path))
+    return handle
 
 
 async def _run_benchmark_stream(
@@ -184,14 +281,20 @@ async def _run_benchmark_stream(
             )
 
             async def _drain_phase() -> None:
-                async for event in runner.run_phase(run_id, device_path, phase):
-                    await emit(event)
-                    if event["event"] == "phase_failed":
-                        await emit({
-                            "event": "run_failed",
-                            "payload": {"error": event["payload"].get("error") or "phase failed"},
-                        })
-                        raise _PhaseFailure()
+                # aclosing: if emit() fails because the API connection
+                # dropped, the generator is closed right away and fio is
+                # terminated instead of running on unobserved.
+                async with contextlib.aclosing(
+                    runner.run_phase(run_id, device_path, phase)
+                ) as events:
+                    async for event in events:
+                        await emit(event)
+                        if event["event"] == "phase_failed":
+                            await emit({
+                                "event": "run_failed",
+                                "payload": {"error": event["payload"].get("error") or "phase failed"},
+                            })
+                            raise _PhaseFailure()
 
             current_phase_task = asyncio.create_task(_drain_phase())
             try:

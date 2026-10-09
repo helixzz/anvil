@@ -23,6 +23,12 @@ async function jsonFetch<T>(
   input: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const res = await rawFetch(input, init);
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+async function rawFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const token = getToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -35,10 +41,23 @@ async function jsonFetch<T>(
   }
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `${res.status} ${res.statusText}`);
+    throw new Error(errorDetail(text) || `${res.status} ${res.statusText}`);
   }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return res;
+}
+
+// FastAPI errors are `{"detail": "..."}`; surface just the message.
+function errorDetail(text: string): string {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && "detail" in parsed) {
+      const detail = (parsed as { detail: unknown }).detail;
+      if (typeof detail === "string") return detail;
+    }
+  } catch {
+    // not JSON: fall through to the raw body
+  }
+  return text;
 }
 
 export interface Device {
@@ -68,6 +87,7 @@ export interface Device {
     port?: string;
     notes?: string;
   } | null;
+  runner_id: string | null;
 }
 
 export interface ProfilePhase {
@@ -130,9 +150,10 @@ export interface Run {
   error_message: string | null;
   device_path_at_run: string;
   phases: RunPhase[];
-  host_system?: Record<string, unknown> | null;
-  smart_before?: Record<string, unknown> | null;
+host_system?: Record<string, unknown> | null;
+smart_before?: Record<string, unknown> | null;
   smart_after?: Record<string, unknown> | null;
+  runner_id: string | null;
 }
 
 export interface RunSummary {
@@ -145,6 +166,7 @@ export interface RunSummary {
   queued_at: string;
   started_at: string | null;
   finished_at: string | null;
+  runner_id: string | null;
 }
 
 export interface SystemStatus {
@@ -155,6 +177,37 @@ export interface SystemStatus {
   running_count: number;
   queued_count: number;
   uptime_seconds: number;
+  runners: { id: string; name: string; online: boolean
+}[];
+}
+
+export interface RunnerHostInfo {
+  hostname?: string;
+  platform?: string;
+  kernel?: string;
+  architecture?: string;
+  cpu_model?: string;
+  cpu_count?: number;
+  mem_total_bytes?: number;
+  runner_version?: string;
+}
+
+export interface RunnerOut {
+  id: string;
+  name: string;
+  kind: "unix" | "tcp";
+  address: string;
+  enabled: boolean;
+  tls_fingerprint: string | null;
+  has_token: boolean;
+  host_info: RunnerHostInfo | null;
+  last_seen_at: string | null;
+  created_at: string;
+  online: boolean;
+  busy: boolean;
+  device_count: number;
+  running_run_id: string | null;
+  error: string | null;
 }
 
 export interface MetricPoint {
@@ -368,6 +421,7 @@ export interface TuneReceipt {
   results: TuneResult[];
   reverted: boolean;
   revert_error?: string | null;
+  runner_id?: string | null;
 }
 
 export interface FleetStats {
@@ -557,9 +611,55 @@ export const api = {
       actions: string[];
     }>(`/api/admin/audit-log${suffix}`);
   },
+  listRunners: () => jsonFetch<RunnerOut[]>("/api/runners"),
+  getRunner: (id: string) =>
+    jsonFetch<RunnerOut>(`/api/runners/${encodeURIComponent(id)}`),
+  createRunner: (body: {
+    name: string;
+    address: string;
+    token: string;
+    tls_fingerprint?: string | null;
+  }) =>
+    jsonFetch<RunnerOut>("/api/runners", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateRunner: (
+    id: string,
+    body: {
+      name?: string;
+      address?: string;
+      token?: string;
+      tls_fingerprint?: string | null;
+      refetch_fingerprint?: boolean;
+      enabled?: boolean;
+    },
+  ) =>
+    jsonFetch<RunnerOut>(`/api/runners/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteRunner: (id: string) =>
+    jsonFetch<void>(`/api/runners/${encodeURIComponent(id)}`, { method: "DELETE" }),
   listDevices: () => jsonFetch<Device[]>("/api/devices"),
   getDevice: (id: string) => jsonFetch<Device>(`/api/devices/${encodeURIComponent(id)}`),
-  rescanDevices: () => jsonFetch<Device[]>("/api/devices/rescan", { method: "POST" }),
+  rescanDevices: async (
+    runnerId?: string,
+  ): Promise<{ devices: Device[]; errors: Record<string, string> | null }> => {
+    const qs = runnerId ? `?runner_id=${encodeURIComponent(runnerId)}` : "";
+    const res = await rawFetch(`/api/devices/rescan${qs}`, { method: "POST" });
+    const devices = (await res.json()) as Device[];
+    let errors: Record<string, string> | null = null;
+    const hdr = res.headers.get("X-Anvil-Rescan-Errors");
+    if (hdr) {
+      try {
+        errors = JSON.parse(hdr) as Record<string, string>;
+      } catch {
+        errors = null;
+      }
+    }
+    return { devices, errors };
+  },
   setDeviceLocation: (
     id: string,
     body: { chassis?: string | null; bay?: string | null; tray?: string | null; port?: string | null; notes?: string | null },
@@ -641,15 +741,21 @@ export const api = {
     jsonFetch<CrossModelCompareResult>(
       `/api/models/compare?slugs=${encodeURIComponent(slugs.join(","))}&phase_name=${encodeURIComponent(phase_name)}`,
     ),
-  getEnvironment: () => jsonFetch<EnvironmentReport>("/api/environment"),
-  tunePreview: (keys?: string[]) => {
-    const qs = keys && keys.length ? `?keys=${encodeURIComponent(keys.join(","))}` : "";
-    return jsonFetch<{ preview: TunePreviewEntry[] }>(`/api/environment/tune/preview${qs}`);
+  getEnvironment: (runnerId?: string) =>
+    jsonFetch<EnvironmentReport>(
+      `/api/environment${runnerId ? `?runner_id=${encodeURIComponent(runnerId)}` : ""}`,
+    ),
+  tunePreview: (keys?: string[], runnerId?: string) => {
+    const qs = new URLSearchParams();
+    if (keys && keys.length) qs.set("keys", keys.join(","));
+    if (runnerId) qs.set("runner_id", runnerId);
+    const suffix = qs.toString() ? "?" + qs.toString() : "";
+    return jsonFetch<{ preview: TunePreviewEntry[] }>(`/api/environment/tune/preview${suffix}`);
   },
-  tuneApply: (keys?: string[] | null) =>
+  tuneApply: (keys?: string[] | null, runnerId?: string | null) =>
     jsonFetch<TuneReceipt>(`/api/environment/tune/apply`, {
       method: "POST",
-      body: JSON.stringify({ keys: keys ?? null }),
+      body: JSON.stringify({ keys: keys ?? null, runner_id: runnerId ?? null }),
     }),
   tuneRevert: (receiptId: string) =>
     jsonFetch<TuneReceipt>(`/api/environment/tune/revert`, {

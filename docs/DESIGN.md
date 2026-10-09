@@ -32,8 +32,12 @@ Single-tenant, trusted LAN deployment:
 - Authentication is a single bearer token; no RBAC for v1.
 - The server is dedicated to testing; the block devices being tested are also
   physically attached to the same host.
-- Tests execute **serially** under a global lock to eliminate PCIe, CPU, and
+- Tests execute **serially per test host** to eliminate PCIe, CPU, and
   thermal contention that would compromise measurement reproducibility.
+- Since 1.11.0 additional test hosts can be attached as **remote runners**
+  (native systemd service, TCP + pinned TLS + token). Each host has its own
+  serial lane; hosts run in parallel. See
+  [operator-guide/remote-runners.md](operator-guide/remote-runners.md).
 
 ## 3. High-level architecture
 

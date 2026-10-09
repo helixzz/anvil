@@ -1,3 +1,3 @@
 """Anvil privileged runner."""
 
-__version__ = "1.10.4"
+__version__ = "1.11.0"

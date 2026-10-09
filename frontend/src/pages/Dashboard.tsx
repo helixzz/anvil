@@ -159,7 +159,7 @@ export default function Dashboard() {
     queryKey: ["dashboard-degraded"],
     queryFn: () => api.pcieDegraded(),
   });
-  const env = useQuery({ queryKey: ["environment"], queryFn: api.getEnvironment });
+  const env = useQuery({ queryKey: ["environment"], queryFn: () => api.getEnvironment() });
   const alarms = useQuery({ queryKey: ["dashboard-alarms"], queryFn: () => api.alarms(24) });
 
   const envDot = env.data
@@ -207,14 +207,29 @@ export default function Dashboard() {
         <KpiCard
           title={t("status.runner")}
           value={
-            <>
+            <span
+              title={
+                status.data?.runners
+                  ?.map((r) => `${r.name}: ${r.online ? t("runners.online") : t("runners.offline")}`)
+                  .join("\n") || undefined
+              }
+            >
               <StatusDot color={status.data?.runner_connected ? "#4ade80" : "#f87171"} />
               {status.data?.runner_connected
                 ? t("status.runnerConnected")
                 : t("status.runnerDisconnected")}
-            </>
+            </span>
           }
-          sub={status.data?.simulation_mode ? t("status.simulation") : undefined}
+          sub={
+            status.data?.runners && status.data.runners.length > 0
+              ? t("status.runnersOnline", {
+                  online: status.data.runners.filter((r) => r.online).length,
+                  total: status.data.runners.length,
+                })
+              : status.data?.simulation_mode
+                ? t("status.simulation")
+                : undefined
+          }
         />
         <KpiCard
           title={t("dashboard.envHealth")}

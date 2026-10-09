@@ -12,6 +12,7 @@ export default function NewRun() {
   const navigate = useNavigate();
   const devicesQ = useQuery({ queryKey: ["devices"], queryFn: api.listDevices });
   const profilesQ = useQuery({ queryKey: ["profiles"], queryFn: api.listProfiles });
+  const runnersQ = useQuery({ queryKey: ["runners"], queryFn: api.listRunners });
 
   const [deviceIds, setDeviceIds] = useState<Set<string>>(new Set());
   const [profileNames, setProfileNames] = useState<Set<string>>(new Set());
@@ -27,9 +28,13 @@ export default function NewRun() {
   const testable: Device[] = (devicesQ.data ?? []).filter((d) => d.is_testable);
   const profiles = profilesQ.data ?? [];
 
+  const runnerName = (runnerId: string | null): string => {
+    if (!runnerId) return "local";
+    return runnersQ.data?.find((r) => r.id === runnerId)?.name ?? runnerId;
+  };
   const deviceOptions: MultiSelectOption[] = testable.map((d) => ({
     value: d.id,
-    label: `${d.model} · ${d.serial}`,
+    label: `${d.model} · ${d.serial} · @${runnerName(d.runner_id)}`,
     sub: `${humanBytes(d.capacity_bytes)} · ${d.current_device_path || "—"}`,
   }));
 

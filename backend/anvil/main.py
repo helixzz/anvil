@@ -20,6 +20,7 @@ from anvil.api.environment import router as environment_router
 from anvil.api.models import router as models_router
 from anvil.api.profile_compare import router as profile_compare_router
 from anvil.api.public import router as public_router
+from anvil.api.runners import router as runners_router
 from anvil.api.runs import router as runs_router
 from anvil.api.schedules import router as schedules_router
 from anvil.api.ws import router as ws_router
@@ -27,10 +28,10 @@ from anvil.auth import hash_password
 from anvil.config import get_settings
 from anvil.db import session_scope
 from anvil.logging import configure_logging, get_logger
-from anvil.models import Device, Run, RunStatus, User, UserRole
+from anvil.models import Device, Run, Runner, RunStatus, User, UserRole
 from anvil.orchestrator import get_queue, reconcile_on_startup
-from anvil.runner import get_runner_client
-from anvil.schemas import SystemStatus
+from anvil.runner.registry import client_for, ensure_local_runner
+from anvil.schemas import RunnerBrief, SystemStatus
 
 _start_time = time.monotonic()
 
@@ -42,6 +43,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     log = get_logger("anvil")
     log.info("anvil_starting", version=__version__, simulation=settings.simulation_mode)
     await _bootstrap_admin()
+    async with session_scope() as session:
+        await ensure_local_runner(session)
     get_queue().start()
     try:
         requeued = await reconcile_on_startup()
@@ -141,11 +144,13 @@ if _cors_origins:
         allow_credentials=_cors_allow_credentials,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
+        expose_headers=["X-Anvil-Rescan-Errors"],
     )
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(devices_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
+app.include_router(runners_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
 app.include_router(environment_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -175,16 +180,27 @@ async def status_endpoint() -> SystemStatus:
             )
         ).scalar_one()
 
-    try:
-        runner_ok = await asyncio.wait_for(
-            get_runner_client(settings.runner_socket).ping(), timeout=2.0
-        )
-    except Exception:
-        runner_ok = False
+        await ensure_local_runner(session)
+        runners = list((await session.execute(
+            select(Runner).where(Runner.enabled.is_(True)).order_by(Runner.created_at.asc())
+        )).scalars())
+
+    async def _ping(runner: Runner) -> bool:
+        try:
+            return await asyncio.wait_for(client_for(runner).ping(), timeout=2.0)
+        except Exception:
+            return False
+
+    online = await asyncio.gather(*(_ping(r) for r in runners))
+    briefs = [
+        RunnerBrief(id=r.id, name=r.name, online=ok) for r, ok in zip(runners, online, strict=True)
+    ]
 
     return SystemStatus(
         version=__version__,
-        runner_connected=runner_ok,
+        # True only when every enabled runner host answers.
+        runner_connected=bool(briefs) and all(b.online for b in briefs),
+        runners=briefs,
         simulation_mode=settings.simulation_mode,
         device_count=device_count,
         running_count=running_count,

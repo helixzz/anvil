@@ -158,7 +158,10 @@ class FioRunner:
                                 yield {"event": "phase_sample", "payload": sample}
 
             rc = await proc.wait()
-        except asyncio.CancelledError:
+        except BaseException:
+            # CancelledError (thermal abort / API abort) and GeneratorExit
+            # (consumer closed us, e.g. the API connection dropped) must both
+            # stop fio; otherwise it keeps hammering the drive orphaned.
             _terminate(proc)
             await stderr_task
             raise

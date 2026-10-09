@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from anvil.api import require_bearer
 from anvil.auth import Principal, require_admin, require_operator, resolve_principal
 from anvil.db import get_session
-from anvil.models import Device, Run, RunMetric, RunPhase, RunStatus
+from anvil.models import LOCAL_RUNNER_ID, Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.orchestrator import audit, get_queue
 from anvil.profiles import get_profile, list_profiles
 from anvil.profiles.snia import RoundObservation, evaluate_steady_state
@@ -66,6 +66,7 @@ async def list_runs(
             "device_id": run.device_id,
             "device_model": device.model if device else "?",
             "device_serial": device.serial if device else "?",
+            "runner_id": run.runner_id,
             "profile_name": run.profile_name,
             "status": run.status,
             "queued_at": run.queued_at.isoformat() if run.queued_at else None,
@@ -118,6 +119,7 @@ async def create_run(
         profile_snapshot=profile.as_dict(),
         status=RunStatus.QUEUED.value,
         device_path_at_run=device_path,
+        runner_id=device.runner_id or LOCAL_RUNNER_ID,
     )
     session.add(run)
     await session.commit()
@@ -130,7 +132,7 @@ async def create_run(
         details={"device_id": device.id, "profile": profile.name},
     )
 
-    await get_queue().submit(run.id)
+    await get_queue().submit(run.id, run.runner_id)
     return run
 
 
@@ -151,7 +153,7 @@ async def batch_create_runs(
     combination that was rejected (device not testable, unknown profile,
     missing serial confirmation for destructive profile).
     """
-    created: list[str] = []
+    created: list[tuple[str, str]] = []
     skipped: list[dict] = []
 
     for device_id in payload.device_ids:
@@ -189,14 +191,15 @@ async def batch_create_runs(
                 profile_snapshot=profile.as_dict(),
                 status=RunStatus.QUEUED.value,
                 device_path_at_run=device.current_device_path,
+                runner_id=device.runner_id or LOCAL_RUNNER_ID,
             )
             session.add(run)
-            created.append(run.id)
+            created.append((run.id, run.runner_id))
 
     await session.commit()
 
-    for run_id in created:
-        await get_queue().submit(run_id)
+    for run_id, run_runner_id in created:
+        await get_queue().submit(run_id, run_runner_id)
         await audit(
             actor="api",
             action="run_queued",
@@ -204,7 +207,7 @@ async def batch_create_runs(
             details={"batch": True},
         )
 
-    return {"created": len(created), "run_ids": created, "skipped": skipped}
+    return {"created": len(created), "run_ids": [rid for rid, _ in created], "skipped": skipped}
 
 
 @router.post("/{run_id}/abort", dependencies=[Depends(require_operator)])

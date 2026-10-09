@@ -21,6 +21,7 @@ class DeviceOut(BaseModel):
     sector_size_physical: int | None
     wwid: str | None
     current_device_path: str | None
+    runner_id: str | None = None
     is_testable: bool
     exclusion_reason: str | None
     first_seen: datetime
@@ -80,6 +81,7 @@ class RunOut(BaseModel):
     finished_at: datetime | None
     error_message: str | None
     device_path_at_run: str
+    runner_id: str | None = None
     phases: list[RunPhaseOut] = Field(default_factory=list)
     host_system: dict[str, Any] | None = None
     smart_before: dict[str, Any] | None = None
@@ -116,9 +118,16 @@ class ProfileOut(BaseModel):
     phases: list[dict[str, Any]]
 
 
+class RunnerBrief(BaseModel):
+    id: str
+    name: str
+    online: bool
+
+
 class SystemStatus(BaseModel):
     version: str
     runner_connected: bool
+    runners: list[RunnerBrief] = Field(default_factory=list)
     simulation_mode: bool
     device_count: int
     running_count: int

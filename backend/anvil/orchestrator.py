@@ -8,45 +8,87 @@ from typing import Any
 import ulid
 from sqlalchemy import select
 
-from anvil.config import get_settings
 from anvil.db import session_scope
 from anvil.logging import get_logger
-from anvil.models import AuditLog, Device, Run, RunMetric, RunPhase, RunStatus
+from anvil.models import LOCAL_RUNNER_ID, AuditLog, Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.profiles import Profile, get_profile
 from anvil.pubsub import get_broadcaster
-from anvil.runner import RunnerClient, get_runner_client
+from anvil.runner.registry import get_runner_client, record_ping
 
 log = get_logger("anvil.orchestrator")
 
 
+class _Lane:
+    """Serial execution lane for one runner host.
+
+    Benchmarks on the same host run strictly one at a time (PCIe, CPU and
+    thermal contention would corrupt measurements); different hosts run in
+    parallel because they share nothing.
+    """
+
+    def __init__(self, runner_id: str) -> None:
+        self.runner_id = runner_id
+        self.queue: asyncio.Queue[str] = asyncio.Queue()
+        self.worker: asyncio.Task[None] | None = None
+        self.running_run_id: str | None = None
+        self.running_task: asyncio.Task[None] | None = None
+
+
 class JobQueue:
     def __init__(self) -> None:
-        self._queue: asyncio.Queue[str] = asyncio.Queue()
-        self._worker: asyncio.Task[None] | None = None
+        self._lanes: dict[str, _Lane] = {}
         self._scheduler: asyncio.Task[None] | None = None
-        self._lock = asyncio.Lock()
-        self._running_run_id: str | None = None
-        self._running_task: asyncio.Task[None] | None = None
+        self._started = False
         self._abort_requests: set[str] = set()
 
     def start(self) -> None:
-        if self._worker is None or self._worker.done():
-            self._worker = asyncio.create_task(self._run_forever(), name="anvil-job-queue")
+        self._started = True
+        for lane in self._lanes.values():
+            self._ensure_worker(lane)
         if self._scheduler is None or self._scheduler.done():
             self._scheduler = asyncio.create_task(self._scheduler_loop(), name="anvil-scheduler")
 
     def stop(self) -> None:
-        if self._worker is not None:
-            self._worker.cancel()
+        self._started = False
+        for lane in self._lanes.values():
+            if lane.worker is not None:
+                lane.worker.cancel()
         if self._scheduler is not None:
             self._scheduler.cancel()
 
-    async def submit(self, run_id: str) -> None:
-        await self._queue.put(run_id)
+    def _ensure_worker(self, lane: _Lane) -> None:
+        if lane.worker is None or lane.worker.done():
+            lane.worker = asyncio.create_task(
+                self._run_forever(lane), name=f"anvil-job-queue-{lane.runner_id}"
+            )
+
+    def _lane(self, runner_id: str) -> _Lane:
+        lane = self._lanes.get(runner_id)
+        if lane is None:
+            lane = _Lane(runner_id)
+            self._lanes[runner_id] = lane
+        if self._started:
+            self._ensure_worker(lane)
+        return lane
+
+    async def submit(self, run_id: str, runner_id: str | None = None) -> None:
+        """Enqueue a committed run on its runner's lane.
+
+        `runner_id` may be passed when the caller already knows it;
+        otherwise it is read from the run (falling back to the device's
+        runner, which is then pinned onto the run).
+        """
+        if runner_id is None:
+            runner_id = await _resolve_run_runner(run_id)
+        await self._lane(runner_id).queue.put(run_id)
 
     @property
-    def running_run_id(self) -> str | None:
-        return self._running_run_id
+    def running_run_ids(self) -> dict[str, str]:
+        return {
+            lane.runner_id: lane.running_run_id
+            for lane in self._lanes.values()
+            if lane.running_run_id is not None
+        }
 
     async def abort(self, run_id: str) -> str:
         """Request abort for a queued or running run.
@@ -56,38 +98,42 @@ class JobQueue:
         was cancelled (caller should poll for the final status), or
         "not_active" if the run is neither queued nor running.
         """
-        if self._running_run_id == run_id and self._running_task is not None:
-            self._abort_requests.add(run_id)
-            self._running_task.cancel()
-            return "aborting"
+        for lane in self._lanes.values():
+            if lane.running_run_id == run_id and lane.running_task is not None:
+                self._abort_requests.add(run_id)
+                lane.running_task.cancel()
+                return "aborting"
         return "not_active"
 
-    async def _run_forever(self) -> None:
+    async def _run_forever(self, lane: _Lane) -> None:
         while True:
             try:
-                run_id = await self._queue.get()
+                run_id = await lane.queue.get()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                log.error("queue_get_failed", error=str(exc), exc_info=True)
+                log.error("queue_get_failed", runner_id=lane.runner_id, error=str(exc), exc_info=True)
                 await asyncio.sleep(1.0)
                 continue
-            async with self._lock:
-                self._running_run_id = run_id
-                task = asyncio.create_task(_execute_run(run_id), name=f"anvil-run-{run_id}")
-                self._running_task = task
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    log.info("run_cancelled", run_id=run_id)
-                    await _safe_mark_aborted(run_id)
-                except Exception as exc:
-                    log.error("run_failed", run_id=run_id, error=str(exc), exc_info=True)
-                    await _safe_mark_failed(run_id, str(exc))
-                finally:
-                    self._running_run_id = None
-                    self._running_task = None
-                    self._abort_requests.discard(run_id)
+            lane.running_run_id = run_id
+            task = asyncio.create_task(_execute_run(run_id), name=f"anvil-run-{run_id}")
+            lane.running_task = task
+            try:
+                await task
+            except asyncio.CancelledError:
+                if run_id not in self._abort_requests:
+                    # The lane worker itself is being cancelled (shutdown);
+                    # reconcile_on_startup marks the run failed next boot.
+                    raise
+                log.info("run_cancelled", run_id=run_id)
+                await _safe_mark_aborted(run_id)
+            except Exception as exc:
+                log.error("run_failed", run_id=run_id, error=str(exc), exc_info=True)
+                await _safe_mark_failed(run_id, str(exc))
+            finally:
+                lane.running_run_id = None
+                lane.running_task = None
+                self._abort_requests.discard(run_id)
 
     async def _scheduler_loop(self) -> None:
         from datetime import timedelta
@@ -96,6 +142,7 @@ class JobQueue:
         while True:
             try:
                 await asyncio.sleep(60)
+                to_submit: list[tuple[str, str]] = []
                 async with session_scope() as session:
                     now = datetime.now(UTC)
                     due = (await session.execute(
@@ -107,6 +154,8 @@ class JobQueue:
                     )).scalars().all()
                     for sched in due:
                         try:
+                            device = await session.get(Device, sched.device_id)
+                            runner_id = (device.runner_id if device else None) or LOCAL_RUNNER_ID
                             run_id = str(ulid.ULID())
                             session.add(Run(
                                 id=run_id,
@@ -115,19 +164,35 @@ class JobQueue:
                                 profile_snapshot={},
                                 status=RunStatus.QUEUED.value,
                                 device_path_at_run="/dev/auto-scheduled",
+                                runner_id=runner_id,
                             ))
                             await session.flush()
-                            await self.submit(run_id)
+                            to_submit.append((run_id, runner_id))
                             sched.last_run_at = now
                             sched.next_run_at = now + timedelta(hours=sched.interval_hours)
                             log.info("schedule_triggered", schedule_id=sched.id, run_id=run_id)
                         except Exception as exc:
                             log.error("schedule_run_failed", schedule_id=sched.id, error=str(exc))
+                # Submit only after commit: lane workers read the run in their
+                # own session and must see the committed row.
+                for run_id, runner_id in to_submit:
+                    await self.submit(run_id, runner_id)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 log.error("scheduler_loop_error", error=str(exc), exc_info=True)
                 await asyncio.sleep(60)
+
+
+async def _resolve_run_runner(run_id: str) -> str:
+    async with session_scope() as session:
+        run = await session.get(Run, run_id)
+        if run is None:
+            return LOCAL_RUNNER_ID
+        if run.runner_id is None:
+            device = await session.get(Device, run.device_id)
+            run.runner_id = (device.runner_id if device else None) or LOCAL_RUNNER_ID
+        return run.runner_id
 
 
 _queue_instance: JobQueue | None = None
@@ -255,8 +320,6 @@ async def reconcile_on_startup() -> list[str]:
 
 
 async def _execute_run(run_id: str) -> None:
-    settings = get_settings()
-    client: RunnerClient = get_runner_client(settings.runner_socket)
     broadcaster = get_broadcaster()
 
     async with session_scope() as session:
@@ -271,13 +334,18 @@ async def _execute_run(run_id: str) -> None:
         if profile is None:
             raise RuntimeError(f"profile {run.profile_name} is unknown")
 
+        runner_id = run.runner_id or device.runner_id or LOCAL_RUNNER_ID
+        if device.runner_id is not None and device.runner_id != runner_id:
+            # The drive was moved to another host after this run was queued;
+            # its device path on the original host now means something else.
+            raise RuntimeError(
+                "device has moved to a different runner host since this run was queued; "
+                "re-queue the run"
+            )
+        run.runner_id = runner_id
         run.status = RunStatus.PREFLIGHT.value
         run.started_at = datetime.now(UTC)
-        host_sys = _capture_host_system()
-        device_meta = device.metadata_json or {}
-        if device_meta.get("pcie"):
-            host_sys["pcie_at_run"] = device_meta["pcie"]
-        run.host_system = host_sys
+        device_pcie = (device.metadata_json or {}).get("pcie")
         device_path = device.current_device_path or run.device_path_at_run
         await session.flush()
 
@@ -286,11 +354,20 @@ async def _execute_run(run_id: str) -> None:
         {"event": "run_started", "payload": {"run_id": run_id, "device_path": device_path}},
     )
 
-    ok = await client.ping()
-    if not ok:
+    client = await get_runner_client(runner_id)
+    ping = await client.ping_info()
+    if ping is None:
         raise RuntimeError(
-            "Runner socket is unreachable. Ensure the privileged runner container is healthy."
+            f"Runner '{runner_id}' is unreachable. Check that the runner service on that "
+            "host is healthy and reachable from the API."
         )
+    await record_ping(runner_id, ping)
+
+    # Older runners do not report host facts; fall back to the API's view.
+    host_sys: dict[str, Any] = dict(ping.get("host") or _capture_host_system())
+    host_sys["runner_id"] = runner_id
+    if device_pcie:
+        host_sys["pcie_at_run"] = device_pcie
 
     try:
         smart_before = await client.smart(device_path)
@@ -302,6 +379,7 @@ async def _execute_run(run_id: str) -> None:
         run = await session.get(Run, run_id)
         if run is None:
             return
+        run.host_system = host_sys
         run.smart_before = smart_before
         run.status = RunStatus.RUNNING.value
 

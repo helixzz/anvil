@@ -12,7 +12,8 @@
     "compare": "跨型号对比",
     "system": "系统环境",
     "users": "用户管理",
-    "sso": "SSO"
+    "sso": "SSO",
+    "runners": "测试主机"
   },
   "common": {
     "loading": "加载中…",
@@ -49,7 +50,8 @@
     "devices": "设备",
     "queued": "排队中",
     "running": "运行中",
-    "version": "版本"
+    "version": "版本",
+    "runnersOnline": "{{online}}/{{total}} 在线"
   },
   "devices": {
     "title": "设备",
@@ -65,6 +67,9 @@
     "reason": "原因",
     "noDevices": "尚未发现任何块设备。点击\"重新扫描\"以枚举。",
     "lastSeen": "最近发现",
+    "host": "测试主机",
+    "allHosts": "全部主机",
+    "rescanErrors": "部分主机扫描失败：",
     "history": "历史运行（每次运行的最佳 IOPS / 带宽）",
     "noHistory": "该设备尚无完成的运行。",
     "bestReadIops": "最高读 IOPS",
@@ -81,6 +86,7 @@
     "queuedAt": "入队时间",
     "startedAt": "开始时间",
     "finishedAt": "完成时间",
+    "host": "测试主机",
     "noRuns": "尚无运行记录。",
     "viewReport": "查看",
     "ongoing": "进行中",
@@ -221,7 +227,8 @@
     "severity": "严重级别",
     "remediation": "修复建议",
     "onlyIssues": "只显示问题项",
-    "noneInCategory": "当前筛选条件下无检查项。"
+    "noneInCategory": "当前筛选条件下无检查项。",
+    "runner": "测试主机"
   },
   "tune": {
     "title": "一键调优",
@@ -376,5 +383,40 @@
     "no": "否",
     "delete": "删除",
     "deleteConfirm": "确认删除用户 {{username}}？此操作不可撤销；该用户的 JWT 会在下一次请求时失效。"
+  },
+  "runners": {
+    "title": "测试主机",
+    "subtitle": "执行基准测试的主机。与本机共部署的为 local；远程 Runner 需在目标测试主机上运行 scripts/install-runner.sh 安装，脚本会输出令牌与 TLS 指纹，在下方表单中填写。",
+    "addRunner": "+ 添加测试主机",
+    "name": "名称",
+    "address": "地址",
+    "addressPlaceholder": "主机:端口",
+    "token": "令牌",
+    "tokenPlaceholder": "Runner 令牌（至少 16 个字符）",
+    "fingerprint": "TLS 指纹",
+    "fingerprintOptional": "TLS 指纹（可选）",
+    "createBtn": "添加",
+    "status": "状态",
+    "online": "在线",
+    "offline": "离线",
+    "disabled": "已禁用",
+    "busy": "忙碌",
+    "host": "主机",
+    "version": "版本",
+    "devices": "设备数",
+    "lastSeen": "最近在线",
+    "enable": "启用",
+    "disable": "禁用",
+    "rotateToken": "轮换令牌",
+    "rotateTokenPrompt": "请输入 Runner「{{name}}」的新令牌（至少 16 个字符）：",
+    "repin": "重新固定证书",
+    "repinConfirm": "确认为「{{name}}」重新固定 TLS 证书？服务器将固定 Runner 当前出示的证书，请仅在可信网络下执行此操作。",
+    "delete": "删除",
+    "deleteConfirm": "确认删除测试主机「{{name}}」？通过该主机发现的设备会保留在库存中。",
+    "pinnedTitle": "已添加 — TLS 证书已固定",
+    "pinnedHelp": "服务器已在首次连接时固定以下 TLS 指纹。请与测试主机上 scripts/install-runner.sh 输出的指纹比对；若不一致，请勿信任此连接。",
+    "localKind": "本地",
+    "noRunners": "尚未注册任何 Runner。",
+    "cores": "{{count}} 核"
   }
 }

@@ -12,7 +12,8 @@
     "compare": "Compare",
     "system": "System",
     "users": "Users",
-    "sso": "SSO"
+    "sso": "SSO",
+    "runners": "Runners"
   },
   "common": {
     "loading": "Loading…",
@@ -49,7 +50,8 @@
     "devices": "Devices",
     "queued": "Queued",
     "running": "Running",
-    "version": "Version"
+    "version": "Version",
+    "runnersOnline": "{{online}}/{{total}} online"
   },
   "devices": {
     "title": "Devices",
@@ -65,6 +67,9 @@
     "reason": "Reason",
     "noDevices": "No block devices discovered yet. Click Rescan to enumerate.",
     "lastSeen": "Last seen",
+    "host": "Host",
+    "allHosts": "All hosts",
+    "rescanErrors": "Some hosts failed to rescan:",
     "history": "Run history (best IOPS and BW per completed run)",
     "noHistory": "No completed runs yet for this device.",
     "bestReadIops": "Best read IOPS",
@@ -81,6 +86,7 @@
     "queuedAt": "Queued",
     "startedAt": "Started",
     "finishedAt": "Finished",
+    "host": "Host",
     "noRuns": "No runs yet.",
     "viewReport": "View",
     "ongoing": "In progress",
@@ -221,7 +227,8 @@
     "severity": "Severity",
     "remediation": "Remediation",
     "onlyIssues": "Show issues only",
-    "noneInCategory": "No checks match the current filter."
+    "noneInCategory": "No checks match the current filter.",
+    "runner": "Test host"
   },
   "tune": {
     "title": "One-click auto-tune",
@@ -376,5 +383,40 @@
     "no": "no",
     "delete": "Delete",
     "deleteConfirm": "Delete user {{username}}? This cannot be undone; their JWTs stop working on the next request."
+  },
+  "runners": {
+    "title": "Runner hosts",
+    "subtitle": "Test hosts that execute benchmarks. The co-located host is 'local'; remote runners are installed on the test host with scripts/install-runner.sh, which prints the token and TLS fingerprint to enter below.",
+    "addRunner": "+ Add runner",
+    "name": "Name",
+    "address": "Address",
+    "addressPlaceholder": "HOST:PORT",
+    "token": "Token",
+    "tokenPlaceholder": "runner token (min 16 chars)",
+    "fingerprint": "TLS fingerprint",
+    "fingerprintOptional": "TLS fingerprint (optional)",
+    "createBtn": "Add runner",
+    "status": "Status",
+    "online": "online",
+    "offline": "offline",
+    "disabled": "disabled",
+    "busy": "busy",
+    "host": "Host",
+    "version": "Version",
+    "devices": "Devices",
+    "lastSeen": "Last seen",
+    "enable": "Enable",
+    "disable": "Disable",
+    "rotateToken": "Rotate token",
+    "rotateTokenPrompt": "Enter the new token for runner \"{{name}}\" (min 16 characters):",
+    "repin": "Re-pin cert",
+    "repinConfirm": "Re-pin the TLS certificate for \"{{name}}\"? The certificate the runner currently presents will be pinned. Only do this on a network you trust.",
+    "delete": "Delete",
+    "deleteConfirm": "Delete runner \"{{name}}\"? Devices discovered via this runner stay in the inventory.",
+    "pinnedTitle": "Runner added — TLS certificate pinned",
+    "pinnedHelp": "The server pinned this TLS fingerprint on first contact. Compare it with the fingerprint printed by scripts/install-runner.sh on the test host; if they differ, do not trust this connection.",
+    "localKind": "local",
+    "noRunners": "No runners registered.",
+    "cores": "{{count}} cores"
   }
 }

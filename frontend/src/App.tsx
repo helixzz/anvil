@@ -18,6 +18,7 @@ import Users from "@/pages/Users";
 import Sso from "@/pages/Sso";
 import AuditLog from "@/pages/AuditLog";
 import Schedules from "@/pages/Schedules";
+import Runners from "@/pages/Runners";
 import Inventory from "@/pages/Inventory";
 import ProfileCompare from "@/pages/ProfileCompare";
 
@@ -247,6 +248,7 @@ export default function App() {
           <div className="nav-group-label">Monitor</div>
           <NavLink to="/" end>{t("nav.dashboard")}</NavLink>
           <NavLink to="/system">{t("nav.system")}</NavLink>
+          <NavLink to="/runners">{t("nav.runners")}</NavLink>
           {isAdmin && <NavLink to="/admin/audit-log">Audit log</NavLink>}
         </div>
 
@@ -301,11 +303,24 @@ export default function App() {
               className={
                 statusQuery.data?.runner_connected ? "badge badge-ok" : "badge badge-err"
               }
+              title={
+                statusQuery.data?.runners
+                  ?.map((r) => `${r.name}: ${r.online ? t("runners.online") : t("runners.offline")}`)
+                  .join("\n") || undefined
+              }
             >
               {statusQuery.data?.runner_connected
                 ? t("status.runnerConnected")
                 : t("status.runnerDisconnected")}
             </span>
+            {statusQuery.data?.runners && statusQuery.data.runners.length > 0 && (
+              <span className="dim" style={{ fontSize: 11, marginLeft: 6 }}>
+                {t("status.runnersOnline", {
+                  online: statusQuery.data.runners.filter((r) => r.online).length,
+                  total: statusQuery.data.runners.length,
+                })}
+              </span>
+            )}
           </div>
           {statusQuery.data?.simulation_mode && (
             <div className="badge badge-warn">{t("status.simulation")}</div>
@@ -332,6 +347,7 @@ export default function App() {
           <Route path="/compare" element={<Compare />} />
           <Route path="/profile-compare" element={<ProfileCompare />} />
           <Route path="/system" element={<System />} />
+          <Route path="/runners" element={<Runners />} />
           <Route path="/inventory" element={<Inventory />} />
           {isAdmin && <Route path="/admin/users" element={<Users />} /> }
           {isAdmin && <Route path="/admin/sso" element={<Sso />} /> }

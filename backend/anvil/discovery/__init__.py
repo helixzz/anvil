@@ -4,9 +4,8 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
-from anvil.config import get_settings
 from anvil.logging import get_logger
-from anvil.runner import get_runner_client
+from anvil.runner.registry import get_runner_client
 
 log = get_logger("anvil.discovery")
 
@@ -70,8 +69,8 @@ class DiscoveredDevice:
         )
 
 
-async def discover() -> list[DiscoveredDevice]:
-    """Ask the privileged runner to enumerate and classify block devices.
+async def discover(runner_id: str | None = None) -> list[DiscoveredDevice]:
+    """Ask a privileged runner (default: local) to enumerate and classify block devices.
 
     Discovery MUST run in the runner because it requires the host's `/proc`,
     `/sys`, and PID namespace to correctly detect which devices back the root
@@ -79,8 +78,7 @@ async def discover() -> list[DiscoveredDevice]:
     container would see only the container's empty mount namespace and falsely
     mark the host's system disk as testable.
     """
-    settings = get_settings()
-    client = get_runner_client(settings.runner_socket)
+    client = await get_runner_client(runner_id)
     result = await client.discover()
     devices_data = result.get("devices") or []
     return [DiscoveredDevice.from_dict(d) for d in devices_data]

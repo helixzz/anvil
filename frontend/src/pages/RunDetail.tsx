@@ -115,6 +115,8 @@ export default function RunDetail() {
     enabled: !!id,
   });
 
+  const runnersQ = useQuery({ queryKey: ["runners"], queryFn: api.listRunners });
+
   const terminal = isTerminalStatus(runQ.data?.status);
 
   const phasesQ = useQuery({
@@ -153,7 +155,15 @@ export default function RunDetail() {
   const run = runQ.data;
   const phases = phasesQ.data ?? [];
   const metrics = timeseriesQ.data ?? [];
-
+  const hostSys = (run?.host_system ?? null) as Record<string, unknown> | null;
+  const hostName =
+    run?.runner_id != null
+      ? (runnersQ.data?.find((r) => r.id === run.runner_id)?.name ?? run.runner_id)
+      : typeof hostSys?.hostname === "string"
+        ? hostSys.hostname
+        : null;
+  const hostFacts = [hostSys?.kernel, hostSys?.cpu_model]
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
   const abortMut = useMutation({
     mutationFn: () => api.abortRun(id),
     onSuccess: () =>
@@ -243,6 +253,12 @@ export default function RunDetail() {
               <span className="badge badge-ok" style={{ marginLeft: 8 }}>WS</span>
             ) : (
               <span className="badge badge-queued" style={{ marginLeft: 8 }}>WS idle</span>
+            )}
+            {hostName && (
+              <span className="dim" style={{ fontSize: 12, marginLeft: 8 }}>
+                {t("runs.host")}: <span className="mono">{hostName}</span>
+                {hostFacts.length > 0 && <span> · {hostFacts.join(" · ")}</span>}
+              </span>
             )}
           </div>
         </div>

@@ -47,6 +47,37 @@ class DeviceProtocol(StrEnum):
     UNKNOWN = "unknown"
 
 
+LOCAL_RUNNER_ID = "local"
+
+
+class RunnerKind(StrEnum):
+    UNIX = "unix"  # co-located runner container, address = socket path
+    TCP = "tcp"  # remote runner host, address = host:port (TLS + token)
+
+
+class Runner(Base):
+    """A test host that executes benchmarks.
+
+    The co-located runner is the row with id `local` (kind unix). Remote
+    hosts are kind tcp: the API dials `address`, pins the TLS certificate by
+    SHA-256 `tls_fingerprint`, and presents `token` on every request. The
+    token is write-only through the API.
+    """
+
+    __tablename__ = "runners"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    address: Mapped[str] = mapped_column(String(256), nullable=False)
+    token: Mapped[str | None] = mapped_column(Text)
+    tls_fingerprint: Mapped[str | None] = mapped_column(String(128))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    host_info: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    last_seen_at: Mapped[datetime | None] = mapped_column(_tz_datetime)
+    created_at: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
+
+
 class Device(Base):
     __tablename__ = "devices"
 
@@ -66,6 +97,9 @@ class Device(Base):
     is_testable: Mapped[bool] = mapped_column(default=True, nullable=False)
     exclusion_reason: Mapped[str | None] = mapped_column(String(256))
     current_device_path: Mapped[str | None] = mapped_column(String(256))
+    runner_id: Mapped[str | None] = mapped_column(
+        ForeignKey("runners.id", ondelete="SET NULL"), index=True
+    )
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     physical_location: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     first_seen: Mapped[datetime] = mapped_column(_tz_datetime, default=utcnow, nullable=False)
@@ -115,6 +149,9 @@ class Run(Base):
     env_before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     env_after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     device_path_at_run: Mapped[str] = mapped_column(String(256), nullable=False)
+    runner_id: Mapped[str | None] = mapped_column(
+        ForeignKey("runners.id", ondelete="SET NULL"), index=True
+    )
     share_slug: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
 
     device: Mapped[Device] = relationship(back_populates="runs")
@@ -254,6 +291,9 @@ class TuneReceipt(Base):
     id: Mapped[str] = mapped_column(String(26), primary_key=True)
     results: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     reverted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    runner_id: Mapped[str | None] = mapped_column(
+        ForeignKey("runners.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(
         _tz_datetime, default=utcnow, nullable=False, index=True
     )

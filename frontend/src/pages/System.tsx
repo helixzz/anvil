@@ -18,29 +18,30 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 export default function System() {
   const { t } = useTranslation();
-  const q = useQuery({ queryKey: ["environment"], queryFn: api.getEnvironment });
+  const [runnerId, setRunnerId] = useState<string>("local");
+  const q = useQuery({
+    queryKey: ["environment", runnerId],
+    queryFn: () => api.getEnvironment(runnerId),
+  });
   const [onlyIssues, setOnlyIssues] = useState(false);
-
+  const runnersQ = useQuery({ queryKey: ["runners"], queryFn: api.listRunners });
+  const runners = runnersQ.data ?? [];
   const meQ = useQuery({ queryKey: ["whoami"], queryFn: api.whoami });
   const isAdmin = meQ.data?.role === "admin" || meQ.data?.is_token;
-
   const [lastReceipt, setLastReceipt] = useState<TuneReceipt | null>(null);
-
   const preview = useQuery({
-    queryKey: ["tune-preview"],
-    queryFn: () => api.tunePreview(),
+    queryKey: ["tune-preview", runnerId],
+    queryFn: () => api.tunePreview(undefined, runnerId),
     enabled: isAdmin,
   });
-
   const applyMut = useMutation({
-    mutationFn: () => api.tuneApply(null),
+    mutationFn: () => api.tuneApply(null, runnerId),
     onSuccess: (r) => {
       setLastReceipt(r);
       void q.refetch();
       void preview.refetch();
     },
   });
-
   const revertMut = useMutation({
     mutationFn: () =>
       lastReceipt?.receipt_id
@@ -81,7 +82,22 @@ export default function System() {
           <h2>{t("system.title")}</h2>
           <div className="dim" style={{ fontSize: 12 }}>{t("system.subtitle")}</div>
         </div>
-        <div className="row">
+        <div className="row" style={{ alignItems: "center" }}>
+          <span className="dim" style={{ fontSize: 12 }}>{t("system.runner")}:</span>
+          <select
+            value={runnerId}
+            onChange={(e) => {
+              setRunnerId(e.target.value);
+              setLastReceipt(null);
+            }}
+          >
+            {runners.length === 0 && <option value="local">local</option>}
+            {runners.map((r) => (
+              <option key={r.id} value={r.id} disabled={!r.online}>
+                {r.name}{!r.online ? ` (${t("runners.offline")})` : ""}
+              </option>
+            ))}
+          </select>
           <label className="dim" style={{ fontSize: 12, alignSelf: "center" }}>
             <input
               type="checkbox"

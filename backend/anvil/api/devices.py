@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
 import ulid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +15,12 @@ from anvil.api import require_bearer
 from anvil.auth import require_operator
 from anvil.db import get_session
 from anvil.discovery import discover
-from anvil.models import Device, DeviceSnapshot, Run
+from anvil.logging import get_logger
+from anvil.models import Device, DeviceSnapshot, Run, Runner
+from anvil.runner.registry import ensure_local_runner
 from anvil.schemas import DeviceOut
+
+log = get_logger("anvil.devices")
 
 router = APIRouter(prefix="/devices", tags=["devices"], dependencies=[Depends(require_bearer)])
 
@@ -63,90 +68,132 @@ async def list_devices(session: AsyncSession = Depends(get_session)) -> list[Dev
 
 
 @router.post("/rescan", response_model=list[DeviceOut], dependencies=[Depends(require_operator)])
-async def rescan(session: AsyncSession = Depends(get_session)) -> list[Device]:
-    found = await discover()
-    now = datetime.now(UTC)
+async def rescan(
+    response: Response,
+    runner_id: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> list[Device]:
+    """Rediscover devices on one runner host (`runner_id`) or on every enabled runner.
 
+    "Not detected" marking is scoped to the host that was scanned: a device is
+    only marked missing when *its own* runner no longer reports it, so a scan
+    of host A never touches host B's drives, and an unreachable host keeps its
+    devices as they were. A drive that shows up on a different host follows
+    it (same fingerprint, so its history is preserved).
+    """
+    await ensure_local_runner(session)
+    await session.commit()
+    if runner_id is not None:
+        runner = await session.get(Runner, runner_id)
+        if runner is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Runner not found")
+        runners = [runner]
+    else:
+        runners = list((await session.execute(
+            select(Runner).where(Runner.enabled.is_(True)).order_by(Runner.created_at.asc())
+        )).scalars())
+
+    now = datetime.now(UTC)
     existing_by_fp: dict[str, Device] = {
         d.fingerprint: d for d in (await session.execute(select(Device))).scalars()
     }
-
-    result: list[Device] = []
-    for d in found:
-        device = existing_by_fp.get(d.fingerprint)
-        if device is None:
-            device = Device(
-                id=str(ulid.ULID()),
-                fingerprint=d.fingerprint,
-                wwid=d.wwid,
-                model=d.model,
-                serial=d.serial,
-                firmware=d.firmware,
-                vendor=_vendor_from_product(d.product_name),
-                protocol=d.protocol,
-                capacity_bytes=d.size_bytes,
-                sector_size_logical=d.sector_size_logical,
-                sector_size_physical=d.sector_size_physical,
-                is_testable=d.is_testable,
-                exclusion_reason=d.exclusion_reason,
-                current_device_path=d.path,
-                first_seen=now,
-                last_seen=now,
-                metadata_json={
+    errors: dict[str, str] = {}
+    scanned = 0
+    for runner in runners:
+        try:
+            found = await discover(runner.id)
+        except Exception as exc:
+            log.warning("rescan_runner_failed", runner_id=runner.id, error=str(exc))
+            errors[runner.name] = str(exc) or exc.__class__.__name__
+            continue
+        scanned += 1
+        for d in found:
+            device = existing_by_fp.get(d.fingerprint)
+            if device is None:
+                device = Device(
+                    id=str(ulid.ULID()),
+                    fingerprint=d.fingerprint,
+                    wwid=d.wwid,
+                    model=d.model,
+                    serial=d.serial,
+                    firmware=d.firmware,
+                    vendor=_vendor_from_product(d.product_name),
+                    protocol=d.protocol,
+                    capacity_bytes=d.size_bytes,
+                    sector_size_logical=d.sector_size_logical,
+                    sector_size_physical=d.sector_size_physical,
+                    is_testable=d.is_testable,
+                    exclusion_reason=d.exclusion_reason,
+                    current_device_path=d.path,
+                    runner_id=runner.id,
+                    first_seen=now,
+                    last_seen=now,
+                    metadata_json={
+                        "rotational": d.rotational,
+                        "partitions": d.partitions,
+                        "mount_points": d.mount_points,
+                        "product_name": d.product_name,
+                        "pcie": d.pcie,
+                    },
+                )
+                session.add(device)
+                existing_by_fp[d.fingerprint] = device
+            else:
+                device.model = d.model or device.model
+                device.serial = d.serial or device.serial
+                device.firmware = d.firmware or device.firmware
+                device.vendor = _vendor_from_product(d.product_name) or device.vendor
+                device.protocol = d.protocol
+                device.capacity_bytes = d.size_bytes or device.capacity_bytes
+                device.sector_size_logical = d.sector_size_logical or device.sector_size_logical
+                device.sector_size_physical = d.sector_size_physical or device.sector_size_physical
+                device.is_testable = d.is_testable
+                device.exclusion_reason = d.exclusion_reason
+                device.current_device_path = d.path
+                device.runner_id = runner.id
+                device.last_seen = now
+                device.metadata_json = {
+                    **(device.metadata_json or {}),
                     "rotational": d.rotational,
                     "partitions": d.partitions,
                     "mount_points": d.mount_points,
                     "product_name": d.product_name,
                     "pcie": d.pcie,
+                }
+
+            snapshot = DeviceSnapshot(
+                id=str(ulid.ULID()),
+                device_id=device.id,
+                captured_at=now,
+                raw_lsblk=d.raw_lsblk,
+                raw_nvme_list=d.raw_nvme,
+                pcie=d.pcie,
+                parsed={
+                    "path": d.path,
+                    "is_testable": d.is_testable,
+                    "exclusion_reason": d.exclusion_reason,
+                    "firmware": d.firmware,
+                    "size_bytes": d.size_bytes,
                 },
             )
-            session.add(device)
-        else:
-            device.model = d.model or device.model
-            device.serial = d.serial or device.serial
-            device.firmware = d.firmware or device.firmware
-            device.vendor = _vendor_from_product(d.product_name) or device.vendor
-            device.protocol = d.protocol
-            device.capacity_bytes = d.size_bytes or device.capacity_bytes
-            device.sector_size_logical = d.sector_size_logical or device.sector_size_logical
-            device.sector_size_physical = d.sector_size_physical or device.sector_size_physical
-            device.is_testable = d.is_testable
-            device.exclusion_reason = d.exclusion_reason
-            device.current_device_path = d.path
-            device.last_seen = now
-            device.metadata_json = {
-                **(device.metadata_json or {}),
-                "rotational": d.rotational,
-                "partitions": d.partitions,
-                "mount_points": d.mount_points,
-                "product_name": d.product_name,
-                "pcie": d.pcie,
-            }
+            session.add(snapshot)
 
-        snapshot = DeviceSnapshot(
-            id=str(ulid.ULID()),
-            device_id=device.id,
-            captured_at=now,
-            raw_lsblk=d.raw_lsblk,
-            raw_nvme_list=d.raw_nvme,
-            pcie=d.pcie,
-            parsed={
-                "path": d.path,
-                "is_testable": d.is_testable,
-                "exclusion_reason": d.exclusion_reason,
-                "firmware": d.firmware,
-                "size_bytes": d.size_bytes,
-            },
+        seen_fingerprints = {d.fingerprint for d in found}
+        for fp, device in existing_by_fp.items():
+            if device.runner_id == runner.id and fp not in seen_fingerprints:
+                device.current_device_path = None
+                device.is_testable = False
+                device.exclusion_reason = "not detected on last rescan"
+
+    if errors and not scanned:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Rescan failed: " + "; ".join(f"{k}: {v}" for k, v in errors.items()),
         )
-        session.add(snapshot)
-        result.append(device)
-
-    seen_fingerprints = {d.fingerprint for d in found}
-    for fp, device in existing_by_fp.items():
-        if fp not in seen_fingerprints:
-            device.current_device_path = None
-            device.is_testable = False
-            device.exclusion_reason = "not detected on last rescan"
+    if errors:
+        # Partial success: report the unreachable hosts without failing the scan.
+        response.headers["X-Anvil-Rescan-Errors"] = json.dumps(errors)
 
     await session.commit()
     refreshed = await session.execute(select(Device).order_by(Device.last_seen.desc()))

@@ -1,0 +1,26 @@
+[Unit]
+Description=Anvil benchmark runner (remote host)
+Documentation=https://helixzz.github.io/anvil/operator-guide/remote-runners/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ANVIL_RUNNER_LISTEN (default 0.0.0.0:9470) and optional extra flags.
+EnvironmentFile=-/etc/anvil-runner/runner.env
+ExecStart=/bin/sh -c 'exec /opt/anvil-runner/bin/anvil-runner \
+  --listen "${ANVIL_RUNNER_LISTEN:-0.0.0.0:9470}" \
+  --tls-cert /etc/anvil-runner/tls.crt \
+  --tls-key /etc/anvil-runner/tls.key \
+  --token-file /etc/anvil-runner/token \
+  ${ANVIL_RUNNER_EXTRA_ARGS:-}'
+Restart=on-failure
+RestartSec=5
+# Must run as root: raw block-device I/O, SMART, sysfs tuning.
+User=root
+# Let an in-flight fio phase be terminated cleanly on stop.
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

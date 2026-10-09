@@ -7,6 +7,46 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.11.0 — 2026-10-09
+
+### Added
+- **Multiple runner hosts.** Anvil can now drive benchmarks on additional
+  test servers besides the co-located runner. See
+  `docs/operator-guide/remote-runners.md`.
+  - New `runners` table and admin API (`GET/POST/PATCH/DELETE /api/runners`)
+    with live status (online / busy / host facts) and a Runners page.
+  - Remote runners listen on TCP (`anvil-runner --listen HOST:PORT`) with
+    TLS (certificate SHA-256 pinned by the API, trust-on-first-use if no
+    fingerprint is supplied) and a per-runner token checked on every request.
+  - `scripts/install-runner.sh` + `deploy/systemd/anvil-runner.service`
+    install a native runner service (no Docker), offline-capable via
+    `--wheelhouse`.
+  - Devices, runs and tune receipts record their `runner_id`; every existing
+    row is migrated to the `local` runner (migration `20261009_0008`).
+  - `POST /api/devices/rescan?runner_id=` rescans one host or all enabled
+    hosts. Missing-device marking is scoped to the scanned host; unreachable
+    hosts are reported in `X-Anvil-Rescan-Errors` and keep their devices.
+  - Environment checks / auto-tune accept `runner_id`; revert always goes to
+    the host that applied the change.
+  - `GET /api/status` lists runners with their online state;
+    `runner_connected` is true only when every enabled runner answers.
+
+### Changed
+- Job queue is now one serial lane **per runner host**: runs on the same host
+  still execute one at a time, different hosts run in parallel. Runs are
+  pinned to their device's host when queued.
+- `run.host_system` now describes the test host (hostname, kernel, CPU
+  model, cores, memory, runner version) as reported by the runner, instead
+  of the API container.
+
+### Fixed
+- If the API connection drops mid-phase, the runner now terminates fio
+  immediately instead of leaving it running unobserved.
+- A second benchmark sent to a runner that is already busy is rejected
+  instead of running concurrently.
+- Scheduled runs are committed before being enqueued, so a lane worker can
+  never pick up a run row it cannot see yet.
+
 ## 1.10.4 — 2026-06-09
 
 ### Changed
