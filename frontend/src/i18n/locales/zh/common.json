@@ -163,7 +163,22 @@
     "phasesUnit": "个阶段",
     "destructiveFlag": "破坏性",
     "nonDestructiveFlag": "只读",
-    "noTestable": "没有可测试的设备，请先扫描。"
+    "noTestable": "没有可测试的设备，请先扫描。",
+    "batchSummary": "{{devices}} 块盘 × {{profiles}} 个方案 × 重复 {{repeat}} 次 = {{total}} 个任务",
+    "batchHint": "请在下方选择设备和测试方案",
+    "batchEta": "预计约 {{duration}}（同一主机上的任务逐个执行，{{hosts}} 台主机并行）",
+    "batchTooMany": "单次最多创建 {{max}} 个任务，请减少选择或降低重复次数。",
+    "pickDevicesPlaceholder": "选择设备…",
+    "pickProfilesPlaceholder": "选择测试方案…",
+    "filterDevices": "按型号、序列号、主机筛选…",
+    "filterProfiles": "筛选方案…",
+    "selectAll": "全选",
+    "selectNone": "清空",
+    "repeat": "重复次数",
+    "repeatHelp": "每个“设备 × 方案”组合按此次数排队，按轮次执行（所有盘先各跑一遍，再整体重复）。",
+    "launchN": "启动 {{count}} 个任务",
+    "skippedTitle": "已排队 {{created}} 个任务，跳过 {{skipped}} 个组合：",
+    "goToRuns": "查看运行记录"
   },
   "status_labels": {
     "queued": "排队中",

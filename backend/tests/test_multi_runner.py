@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from anvil import db as anvil_db
 from anvil.discovery import DiscoveredDevice
@@ -343,3 +344,95 @@ async def test_tune_revert_goes_to_the_runner_that_applied(
     r = await app_client.post("/api/environment/tune/revert", json={"receipt_id": receipt_id})
     assert r.status_code == 200, r.text
     assert calls == [("apply", "r2"), ("revert", "r2")]
+
+
+# ------------------------------------------------- batch runs with repeat
+
+
+@pytest.fixture
+def captured_queue(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str | None]]:
+    submitted: list[tuple[str, str | None]] = []
+
+    class _Q:
+        def __init__(self) -> None:
+            self.running_run_ids: dict[str, str] = {}
+
+        async def submit(self, run_id: str, runner_id: str | None = None) -> None:
+            submitted.append((run_id, runner_id))
+
+        async def abort(self, run_id: str) -> str:
+            return "not_active"
+
+    monkeypatch.setattr("anvil.api.runs.get_queue", lambda: _Q())
+    return submitted
+
+
+async def test_batch_repeat_creates_rounds_in_stable_order(
+    app_client: AsyncClient, captured_queue: list[tuple[str, str | None]]
+) -> None:
+    await _add(_runner("r2"))
+    devices = [_device(f"d{i:02d}", f"SER-{i:02d}", "r2") for i in range(24)]
+    await _add(*devices)
+
+    r = await app_client.post("/api/runs/batch", json={
+        "device_ids": [d.id for d in devices], "profile_names": ["quick"], "repeat": 5,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["created"] == 120 and body["skipped"] == [] and body["repeat"] == 5
+    assert [rid for rid, _ in captured_queue] == body["run_ids"]
+    assert {runner for _, runner in captured_queue} == {"r2"}
+
+    async with anvil_db.session_scope() as s:
+        runs = {r_.id: r_ for r_ in (await s.execute(select(Run))).scalars()}
+    order = [runs[rid].device_id for rid in body["run_ids"]]
+    # round-robin: all 24 drives once, then again, ... (not 5x the same drive in a row)
+    assert order == [d.id for d in devices] * 5
+    # DB order (used to rebuild the queue after a restart) matches submit order
+    by_time = sorted(runs.values(), key=lambda x: x.queued_at)
+    assert [x.id for x in by_time] == body["run_ids"]
+
+
+async def test_batch_rejects_oversized_and_reports_skipped(
+    app_client: AsyncClient, captured_queue: list[tuple[str, str | None]]
+) -> None:
+    await _add(_runner("r2"))
+    await _add(_device("d1", "SER-1", "r2"))
+    r = await app_client.post("/api/runs/batch", json={
+        "device_ids": ["d1"], "profile_names": ["quick"], "repeat": 101,
+    })
+    assert r.status_code == 422
+    r = await app_client.post("/api/runs/batch", json={
+        "device_ids": [f"x{i}" for i in range(300)], "profile_names": ["quick"], "repeat": 7,
+    })
+    assert r.status_code == 400 and "limit" in r.json()["detail"]
+    assert captured_queue == []
+
+    r = await app_client.post("/api/runs/batch", json={
+        "device_ids": ["d1", "d1", "ghost"], "profile_names": ["quick", "nope"], "repeat": 3,
+    })
+    body = r.json()
+    assert body["created"] == 3  # duplicates collapsed, d1 x quick x 3
+    assert sorted((s["device_id"], s["reason"]) for s in body["skipped"]) == [
+        ("d1", "unknown profile"), ("ghost", "device not found"), ("ghost", "device not found"),
+    ]
+
+
+async def test_abort_cancels_a_queued_run_and_worker_skips_it(
+    app_client: AsyncClient, captured_queue: list[tuple[str, str | None]]
+) -> None:
+    from anvil import orchestrator
+
+    await _add(_runner("r2"))
+    await _add(_device("d1", "SER-1", "r2"))
+    run_id = (await app_client.post(
+        "/api/runs", json={"device_id": "d1", "profile_name": "quick"}
+    )).json()["id"]
+
+    r = await app_client.post(f"/api/runs/{run_id}/abort")
+    assert r.status_code == 200 and r.json()["result"] == "aborted_queued"
+    # The lane worker reaching it later must not execute it (no runner is contacted).
+    await orchestrator._execute_run(run_id)
+    async with anvil_db.session_scope() as s:
+        run = await s.get(Run, run_id)
+        assert run.status == RunStatus.ABORTED.value and run.started_at is None

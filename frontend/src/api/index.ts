@@ -721,6 +721,7 @@ export const api = {
   batchCreateRuns: (body: {
     device_ids: string[];
     profile_names: string[];
+    repeat?: number;
     confirm_serial?: Record<string, string>;
   }) =>
     jsonFetch<{ created: number; run_ids: string[]; skipped: { device_id: string; profile_name: string; reason: string }[] }>(

@@ -7,6 +7,10 @@ import { api, type Device } from "@/api";
 import { formatDuration, humanBytes } from "@/lib/format";
 import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
 
+// Mirrors the server-side limits in backend/anvil/api/runs.py.
+const MAX_REPEAT = 100;
+const MAX_BATCH_RUNS = 2000;
+
 export default function NewRun() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -17,11 +21,20 @@ export default function NewRun() {
   const [deviceIds, setDeviceIds] = useState<Set<string>>(new Set());
   const [profileNames, setProfileNames] = useState<Set<string>>(new Set());
   const [serialMap, setSerialMap] = useState<Record<string, string>>({});
+  const [repeat, setRepeat] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<
+    { created: number; items: { device_id: string; profile_name: string; reason: string }[] } | null
+  >(null);
 
   const create = useMutation({
     mutationFn: api.batchCreateRuns,
-    onSuccess: () => navigate("/runs"),
+    onSuccess: (res) => {
+      // Stay on the page when part of the batch was rejected so the
+      // operator sees what was not queued.
+      if (res.skipped.length > 0) setSkipped({ created: res.created, items: res.skipped });
+      else navigate("/runs");
+    },
     onError: (err: Error) => setError(err.message),
   });
 
@@ -48,7 +61,19 @@ export default function NewRun() {
   const selectedProfiles = profiles.filter((p) => profileNames.has(p.name));
   const destructiveProfiles = selectedProfiles.filter((p) => p.destructive);
   const needsSerial = selectedDevices.length > 0 && destructiveProfiles.length > 0;
-  const comboCount = deviceIds.size * profileNames.size;
+  const repeatCount = Number.isFinite(repeat) ? Math.min(Math.max(Math.trunc(repeat), 1), MAX_REPEAT) : 1;
+  const comboCount = deviceIds.size * profileNames.size * repeatCount;
+  const tooMany = comboCount > MAX_BATCH_RUNS;
+  // Runs on one host execute one at a time; hosts work in parallel, so the
+  // batch finishes when the busiest host does.
+  const perRoundSeconds = selectedProfiles.reduce((s, p) => s + p.estimated_duration_seconds, 0);
+  const devicesPerHost = new Map<string, number>();
+  for (const d of selectedDevices) {
+    const key = d.runner_id ?? "local";
+    devicesPerHost.set(key, (devicesPerHost.get(key) ?? 0) + 1);
+  }
+  const busiestHostDevices = Math.max(0, ...devicesPerHost.values());
+  const estimatedSeconds = busiestHostDevices * perRoundSeconds * repeatCount;
 
   function submit() {
     if (deviceIds.size === 0 || profileNames.size === 0) return;
@@ -62,9 +87,11 @@ export default function NewRun() {
       }
     }
     setError(null);
+    setSkipped(null);
     create.mutate({
       device_ids: Array.from(deviceIds),
       profile_names: Array.from(profileNames),
+      repeat: repeatCount,
       confirm_serial: confirm,
     });
   }
@@ -75,8 +102,13 @@ export default function NewRun() {
         <h2>{t("newRun.title")}</h2>
         <div className="dim" style={{ fontSize: 12 }}>
           {comboCount > 0
-            ? `${deviceIds.size}d × ${profileNames.size}p = ${comboCount} run(s)`
-            : "Select device(s) and profile(s) below"}
+            ? t("newRun.batchSummary", {
+                devices: deviceIds.size,
+                profiles: profileNames.size,
+                repeat: repeatCount,
+                total: comboCount,
+              })
+            : t("newRun.batchHint")}
         </div>
       </div>
 
@@ -92,7 +124,10 @@ export default function NewRun() {
               options={deviceOptions}
               selected={deviceIds}
               onChange={setDeviceIds}
-              placeholder="Pick device(s)…"
+              placeholder={t("newRun.pickDevicesPlaceholder")}
+              searchPlaceholder={t("newRun.filterDevices")}
+              allLabel={t("newRun.selectAll")}
+              noneLabel={t("newRun.selectNone")}
             />
           </div>
 
@@ -104,9 +139,51 @@ export default function NewRun() {
               options={profileOptions}
               selected={profileNames}
               onChange={setProfileNames}
-              placeholder="Pick profile(s)…"
+              placeholder={t("newRun.pickProfilesPlaceholder")}
+              searchPlaceholder={t("newRun.filterProfiles")}
+              allLabel={t("newRun.selectAll")}
+              noneLabel={t("newRun.selectNone")}
               disabled={profilesQ.isLoading}
             />
+          </div>
+
+          <div className="card">
+            <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
+              {t("newRun.repeat")}
+            </div>
+            <div className="row" style={{ alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <input
+                type="number"
+                min={1}
+                max={MAX_REPEAT}
+                step={1}
+                value={repeat}
+                onChange={(e) => setRepeat(e.target.valueAsNumber)}
+                onBlur={() => setRepeat(repeatCount)}
+                style={{ width: 90, fontSize: 13 }}
+              />
+              <span className="dim" style={{ fontSize: 12 }}>{t("newRun.repeatHelp")}</span>
+            </div>
+            {comboCount > 0 && (
+              <div style={{ fontSize: 12, marginTop: 10 }}>
+                {t("newRun.batchSummary", {
+                  devices: deviceIds.size,
+                  profiles: profileNames.size,
+                  repeat: repeatCount,
+                  total: comboCount,
+                })}
+                {" · "}
+                {t("newRun.batchEta", {
+                  duration: formatDuration(estimatedSeconds),
+                  hosts: devicesPerHost.size,
+                })}
+              </div>
+            )}
+            {tooMany && (
+              <div className="badge badge-err" style={{ padding: 8, marginTop: 10 }}>
+                {t("newRun.batchTooMany", { max: MAX_BATCH_RUNS })}
+              </div>
+            )}
           </div>
 
           {selectedProfiles.length > 0 && (
@@ -182,16 +259,37 @@ export default function NewRun() {
 
           {error && <div className="badge badge-err" style={{ padding: 8 }}>{error}</div>}
 
+          {skipped && (
+            <div className="card" style={{ border: "1px solid var(--warn, #b45309)" }}>
+              <div style={{ fontSize: 13, marginBottom: 8 }}>
+                {t("newRun.skippedTitle", { created: skipped.created, skipped: skipped.items.length })}
+              </div>
+              <div className="col" style={{ gap: 2, maxHeight: 200, overflow: "auto" }}>
+                {skipped.items.map((s, i) => {
+                  const dev = (devicesQ.data ?? []).find((d) => d.id === s.device_id);
+                  return (
+                    <div key={i} className="mono" style={{ fontSize: 11 }}>
+                      {dev ? `${dev.model} · ${dev.serial}` : s.device_id} · {s.profile_name} — {s.reason}
+                    </div>
+                  );
+                })}
+              </div>
+              <button style={{ marginTop: 10 }} onClick={() => navigate("/runs")}>
+                {t("newRun.goToRuns")}
+              </button>
+            </div>
+          )}
+
           <div className="row" style={{ gap: 8 }}>
             <button
               className="btn-primary"
-              disabled={deviceIds.size === 0 || profileNames.size === 0 || create.isPending}
+              disabled={deviceIds.size === 0 || profileNames.size === 0 || tooMany || create.isPending}
               onClick={submit}
             >
               {create.isPending
                 ? t("common.loading")
                 : comboCount > 0
-                  ? `Launch ${comboCount} run(s)`
+                  ? t("newRun.launchN", { count: comboCount })
                   : t("newRun.launch")}
             </button>
             <button onClick={() => navigate(-1)}>{t("common.cancel")}</button>

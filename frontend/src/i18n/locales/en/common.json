@@ -163,7 +163,22 @@
     "phasesUnit": "phases",
     "destructiveFlag": "Destructive",
     "nonDestructiveFlag": "Read-only",
-    "noTestable": "No testable devices available. Rescan first."
+    "noTestable": "No testable devices available. Rescan first.",
+    "batchSummary": "{{devices}} device(s) × {{profiles}} profile(s) × {{repeat}} repeat(s) = {{total}} run(s)",
+    "batchHint": "Select device(s) and profile(s) below",
+    "batchEta": "about {{duration}} (runs on the same host execute one at a time; {{hosts}} host(s) work in parallel)",
+    "batchTooMany": "A single batch is limited to {{max}} runs. Reduce the selection or the repeat count.",
+    "pickDevicesPlaceholder": "Pick device(s)…",
+    "pickProfilesPlaceholder": "Pick profile(s)…",
+    "filterDevices": "Filter by model, serial, host…",
+    "filterProfiles": "Filter profiles…",
+    "selectAll": "All",
+    "selectNone": "None",
+    "repeat": "Repeat count",
+    "repeatHelp": "Each device × profile combination is queued this many times, round by round (every drive once, then the whole set again).",
+    "launchN": "Launch {{count}} run(s)",
+    "skippedTitle": "{{created}} run(s) queued, {{skipped}} combination(s) skipped:",
+    "goToRuns": "Go to runs"
   },
   "status_labels": {
     "queued": "Queued",

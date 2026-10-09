@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from datetime import UTC, datetime, timedelta
 
 import ulid
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,7 +18,7 @@ from anvil.auth import Principal, require_admin, require_operator, resolve_princ
 from anvil.db import get_session
 from anvil.models import LOCAL_RUNNER_ID, Device, Run, RunMetric, RunPhase, RunStatus
 from anvil.orchestrator import audit, get_queue
-from anvil.profiles import get_profile, list_profiles
+from anvil.profiles import Profile, get_profile, list_profiles
 from anvil.profiles.snia import RoundObservation, evaluate_steady_state
 from anvil.reports import render_run_html, render_run_json_bundle
 from anvil.schemas import MetricPoint, ProfileOut, RunCreate, RunOut
@@ -136,9 +137,13 @@ async def create_run(
     return run
 
 
+MAX_BATCH_RUNS = 2000
+
+
 class BatchRunRequest(BaseModel):
-    device_ids: list[str] = Field(min_length=1, max_length=50)
-    profile_names: list[str] = Field(min_length=1, max_length=10)
+    device_ids: list[str] = Field(min_length=1, max_length=500)
+    profile_names: list[str] = Field(min_length=1, max_length=50)
+    repeat: int = Field(default=1, ge=1, le=100)
     confirm_serial: dict[str, str] = Field(default_factory=dict)
 
 
@@ -147,31 +152,45 @@ async def batch_create_runs(
     payload: BatchRunRequest,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Create runs for every device x profile combination.
+    """Create `repeat` runs for every device x profile combination.
 
     Returns the list of created run IDs plus a `skipped` list for any
     combination that was rejected (device not testable, unknown profile,
     missing serial confirmation for destructive profile).
+
+    Runs are queued round by round: every device x profile combination
+    once, then the whole set again. On a host (which executes serially)
+    this spreads the repeats of one drive apart instead of running them
+    back to back, and an interrupted batch leaves complete rounds.
     """
-    created: list[tuple[str, str]] = []
+    device_ids = list(dict.fromkeys(payload.device_ids))
+    profile_names = list(dict.fromkeys(payload.profile_names))
+    total = len(device_ids) * len(profile_names) * payload.repeat
+    if total > MAX_BATCH_RUNS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Batch would create {total} runs; the limit is {MAX_BATCH_RUNS} per request",
+        )
+
+    combos: list[tuple[Device, Profile]] = []
     skipped: list[dict] = []
 
-    for device_id in payload.device_ids:
+    for device_id in device_ids:
         device = await session.get(Device, device_id)
         if device is None:
-            for pn in payload.profile_names:
+            for pn in profile_names:
                 skipped.append({"device_id": device_id, "profile_name": pn, "reason": "device not found"})
             continue
         if not device.is_testable:
-            for pn in payload.profile_names:
+            for pn in profile_names:
                 skipped.append({"device_id": device_id, "profile_name": pn, "reason": device.exclusion_reason or "not testable"})
             continue
         if not device.current_device_path:
-            for pn in payload.profile_names:
+            for pn in profile_names:
                 skipped.append({"device_id": device_id, "profile_name": pn, "reason": "no current device path"})
             continue
 
-        for profile_name in payload.profile_names:
+        for profile_name in profile_names:
             profile = get_profile(profile_name)
             if profile is None:
                 skipped.append({"device_id": device_id, "profile_name": profile_name, "reason": "unknown profile"})
@@ -184,13 +203,23 @@ async def batch_create_runs(
                     skipped.append({"device_id": device_id, "profile_name": profile_name, "reason": "destructive: serial confirmation required"})
                     continue
 
+            combos.append((device, profile))
+
+    created: list[tuple[str, str]] = []
+    queued_at = datetime.now(UTC)
+    for _round in range(payload.repeat):
+        for device, profile in combos:
+            # Strictly increasing timestamps keep the queue order stable
+            # when it is rebuilt from the database after an API restart.
+            queued_at += timedelta(microseconds=1)
             run = Run(
                 id=str(ulid.ULID()),
                 device_id=device.id,
                 profile_name=profile.name,
                 profile_snapshot=profile.as_dict(),
                 status=RunStatus.QUEUED.value,
-                device_path_at_run=device.current_device_path,
+                queued_at=queued_at,
+                device_path_at_run=device.current_device_path or "",
                 runner_id=device.runner_id or LOCAL_RUNNER_ID,
             )
             session.add(run)
@@ -207,7 +236,12 @@ async def batch_create_runs(
             details={"batch": True},
         )
 
-    return {"created": len(created), "run_ids": [rid for rid, _ in created], "skipped": skipped}
+    return {
+        "created": len(created),
+        "repeat": payload.repeat,
+        "run_ids": [rid for rid, _ in created],
+        "skipped": skipped,
+    }
 
 
 @router.post("/{run_id}/abort", dependencies=[Depends(require_operator)])
@@ -222,7 +256,16 @@ async def abort_run(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Run already in terminal status: {run.status}",
         )
-    result = await get_queue().abort(run_id)
+    if run.status == RunStatus.QUEUED.value and run_id not in get_queue().running_run_ids.values():
+        # Not started yet: cancel it in place. The lane worker skips any
+        # run that is no longer queued when it reaches it.
+        run.status = RunStatus.ABORTED.value
+        run.error_message = "cancelled before start"
+        run.finished_at = datetime.now(UTC)
+        await session.commit()
+        result = "aborted_queued"
+    else:
+        result = await get_queue().abort(run_id)
     await audit(actor="api", action="run_aborted", target=run_id, details={"result": result})
     return {"run_id": run_id, "result": result}
 

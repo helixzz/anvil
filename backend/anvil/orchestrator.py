@@ -327,6 +327,10 @@ async def _execute_run(run_id: str) -> None:
         if run is None:
             log.warning("run_not_found", run_id=run_id)
             return
+        if run.status != RunStatus.QUEUED.value:
+            # Cancelled (or otherwise finalised) while waiting in the lane.
+            log.info("run_skipped_not_queued", run_id=run_id, status=run.status)
+            return
         device = await session.get(Device, run.device_id)
         if device is None:
             raise RuntimeError(f"device {run.device_id} missing for run {run_id}")

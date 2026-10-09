@@ -7,6 +7,27 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.12.0 — 2026-10-09
+
+### Added
+- **Batch runs with a repeat count.** New run → *Repeat count* queues every
+  device × profile combination N times (1–100) in one go, e.g. 24 drives ×
+  1 profile × 5 repeats = 120 runs. `POST /api/runs/batch` accepts `repeat`.
+  Runs are queued round by round (every drive once, then the whole set
+  again), so repeats of one drive are spread apart rather than back to back.
+- Device and profile pickers have a filter box (model, serial, host, path);
+  **All / None** act on the filtered subset, e.g. filter by host name, then
+  select all its drives.
+- The New run page shows the total run count and an estimated wall-clock
+  time (serial per host, hosts in parallel), and lists skipped combinations
+  instead of silently dropping them.
+- Aborting a run that is still **queued** now cancels it (previously a
+  no-op); the queue skips it when its turn comes.
+
+### Changed
+- Batch limits raised from 50 devices / 10 profiles to 500 devices / 50
+  profiles, capped at 2000 runs per request.
+
 ## 1.11.0 — 2026-10-09
 
 ### Added

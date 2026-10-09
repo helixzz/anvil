@@ -12,14 +12,21 @@ export function MultiSelect({
   onChange,
   placeholder = "Select…",
   disabled = false,
+  searchPlaceholder = "Filter…",
+  allLabel = "All",
+  noneLabel = "None",
 }: {
   options: MultiSelectOption[];
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
   placeholder?: string;
   disabled?: boolean;
+  searchPlaceholder?: string;
+  allLabel?: string;
+  noneLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,6 +40,24 @@ export function MultiSelect({
   function toggle(v: string) {
     const next = new Set(selected);
     if (next.has(v)) next.delete(v); else next.add(v);
+    onChange(next);
+  }
+
+  // Every whitespace-separated term must match, so "cobalt003 memblaze"
+  // narrows to one model on one host; All/None then act on that subset.
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const visible = terms.length
+    ? options.filter((o) => {
+        const hay = `${o.label} ${o.sub ?? ""}`.toLowerCase();
+        return terms.every((term) => hay.includes(term));
+      })
+    : options;
+
+  function setVisible(on: boolean) {
+    const next = new Set(selected);
+    for (const o of visible) {
+      if (on) next.add(o.value); else next.delete(o.value);
+    }
     onChange(next);
   }
 
@@ -81,28 +106,48 @@ export function MultiSelect({
             background: "var(--bg-elev)",
             border: "1px solid var(--border)",
             borderRadius: 6,
-            maxHeight: 320,
+            maxHeight: 420,
             overflow: "auto",
             boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
           }}
         >
-          <div style={{ padding: "4px 8px", borderBottom: "1px solid var(--border)", fontSize: 11 }}>
+          <div
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 8px",
+              background: "var(--bg-elev)",
+              borderBottom: "1px solid var(--border)",
+              fontSize: 11,
+            }}
+          >
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={searchPlaceholder}
+              style={{ flex: 1, fontSize: 12, padding: "3px 8px" }}
+            />
             <button
               type="button"
-              onClick={() => onChange(new Set(options.map((o) => o.value)))}
-              style={{ fontSize: 11, padding: "2px 6px", marginRight: 6 }}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => onChange(new Set())}
+              onClick={() => setVisible(true)}
               style={{ fontSize: 11, padding: "2px 6px" }}
             >
-              None
+              {allLabel}
             </button>
+            <button
+              type="button"
+              onClick={() => setVisible(false)}
+              style={{ fontSize: 11, padding: "2px 6px" }}
+            >
+              {noneLabel}
+            </button>
+            <span className="dim">{visible.length}/{options.length}</span>
           </div>
-          {options.map((o) => (
+          {visible.map((o) => (
             <label
               key={o.value}
               style={{
