@@ -7,6 +7,15 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.12.1 — 2026-10-14
+
+### Fixed
+- Dashboard **Run activity (last 30 days)** bucketed runs by UTC date, so in
+  UTC+8 anything queued before 08:00 landed on the previous day and the
+  current local day could show up empty. `GET /api/dashboard/activity` now
+  takes `tz` (IANA name, sent automatically by the web UI from the browser)
+  and counts calendar days in that zone; unknown zones return 400.
+
 ## 1.12.0 — 2026-10-09
 
 ### Added

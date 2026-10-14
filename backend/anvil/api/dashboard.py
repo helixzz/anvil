@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -191,43 +192,49 @@ async def pcie_degraded_devices(
 
 @router.get("/activity")
 async def activity_timeline(
-    session: AsyncSession = Depends(get_session), days: int = 30
+    session: AsyncSession = Depends(get_session),
+    days: int = Query(30, ge=1, le=366),
+    tz: str = "UTC",
 ) -> dict[str, Any]:
-    """Per-day run counts and cumulative bytes-written over the last N days."""
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-    stmt = (
-        select(Run, RunPhase)
-        .outerjoin(RunPhase, RunPhase.run_id == Run.id)
-        .where(Run.queued_at >= cutoff)
-    )
-    rows = (await session.execute(stmt)).all()
+    """Per-day run counts for the last `days` calendar days.
 
-    per_day: dict[str, dict[str, int]] = {}
-    for day_offset in range(days):
-        day = (datetime.now(UTC) - timedelta(days=days - day_offset - 1)).strftime("%Y-%m-%d")
-        per_day[day] = {"total": 0, "complete": 0, "failed": 0, "aborted": 0}
+    Days are calendar dates in `tz` (an IANA name such as `Asia/Shanghai`;
+    the web UI sends the browser's zone). Bucketing by UTC date would put a
+    run queued at 07:00 in UTC+8 on the previous day.
+    """
+    try:
+        zone = ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Unknown time zone: {tz!r}") from exc
 
-    seen_runs: set[str] = set()
-    for run, _ in rows:
-        if run.id in seen_runs:
+    today = datetime.now(zone).date()
+    first_day = today - timedelta(days=days - 1)
+    window_start = datetime.combine(first_day, time.min, tzinfo=zone)
+
+    rows = (await session.execute(
+        select(Run.queued_at, Run.status).where(Run.queued_at >= window_start)
+    )).all()
+
+    per_day: dict[str, dict[str, int]] = {
+        (first_day + timedelta(days=i)).isoformat(): {
+            "total": 0, "complete": 0, "failed": 0, "aborted": 0,
+        }
+        for i in range(days)
+    }
+    for queued_at, run_status in rows:
+        if queued_at.tzinfo is None:  # SQLite returns naive UTC
+            queued_at = queued_at.replace(tzinfo=UTC)
+        counts = per_day.get(queued_at.astimezone(zone).date().isoformat())
+        if counts is None:
             continue
-        seen_runs.add(run.id)
-        day = run.queued_at.strftime("%Y-%m-%d")
-        if day not in per_day:
-            continue
-        per_day[day]["total"] += 1
-        if run.status in ("complete", "failed", "aborted"):
-            per_day[day][run.status] += 1
+        counts["total"] += 1
+        if run_status in ("complete", "failed", "aborted"):
+            counts[run_status] += 1
 
     return {
         "days": days,
-        "series": [
-            {
-                "day": day,
-                **counts,
-            }
-            for day, counts in sorted(per_day.items())
-        ],
+        "tz": tz,
+        "series": [{"day": day, **counts} for day, counts in per_day.items()],
     }
 
 

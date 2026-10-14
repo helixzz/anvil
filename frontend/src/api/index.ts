@@ -767,8 +767,13 @@ export const api = {
   leaderboards: (limit = 5) =>
     jsonFetch<Leaderboards>(`/api/dashboard/leaderboards?limit=${limit}`),
   pcieDegraded: () => jsonFetch<PcieDegradedEntry[]>("/api/dashboard/pcie-degraded"),
-  activity: (days = 30) =>
-    jsonFetch<ActivityTimeline>(`/api/dashboard/activity?days=${days}`),
+  activity: (days = 30) => {
+    // Bucket by the viewer's calendar days, not UTC ones.
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    return jsonFetch<ActivityTimeline>(
+      `/api/dashboard/activity?days=${days}&tz=${encodeURIComponent(tz)}`,
+    );
+  },
   alarms: (hours = 24) =>
     jsonFetch<AlarmEntry[]>(`/api/dashboard/alarms?hours=${hours}`),
   getRunShare: (id: string) =>
