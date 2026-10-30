@@ -7,6 +7,29 @@ All notable changes to Anvil are recorded here. Versioning follows
 - **MINOR** bumps for user-visible feature additions and schema changes.
 - **PATCH** bumps for internal-only fixes and polish.
 
+## 1.13.0 — 2026-10-30
+
+### Changed
+- **Profile Compare compares product models by default.** Pick a profile,
+  then one or more models; each model is one series aggregated over every
+  drive of that model with complete runs. Each drive is first reduced to the
+  median of its own runs, then the model value is the median across drives,
+  so a drive with more repeats does not dominate. "Individual drive" mode is
+  still available and now uses the median of all of a drive's complete runs
+  (previously only its latest run).
+- Only models / drives that actually have complete runs of the selected
+  profile are offered, with drive and run counts and firmware.
+
+### Added
+- Hover a cell or point to see the spread behind each median: the
+  drive-to-drive range for models (exposes a weak unit), the run-to-run range
+  for single drives.
+- A **Samples** table lists, per series, the drives (serial × runs), total
+  runs and firmware, flagging mixed firmware within a model.
+- API: `GET /api/profile-compare/candidates?profile_name=`;
+  `GET /api/profile-compare` accepts `model_slugs` or `device_ids` (exactly
+  one) and returns `spread` per point.
+
 ## 1.12.1 — 2026-10-14
 
 ### Fixed

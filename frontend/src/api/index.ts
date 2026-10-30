@@ -60,6 +60,27 @@ function errorDetail(text: string): string {
   return text;
 }
 
+export interface CompareCandidates {
+  profile_name: string;
+  models: {
+    model_slug: string;
+    brand: string;
+    model: string;
+    unit_count: number;
+    run_count: number;
+    firmwares: string[];
+  }[];
+  devices: {
+    device_id: string;
+    model_slug: string;
+    brand: string;
+    model: string;
+    serial: string;
+    firmware: string | null;
+    run_count: number;
+  }[];
+}
+
 export interface Device {
   id: string;
   fingerprint: string;
@@ -686,6 +707,16 @@ export const api = {
     }>(`/api/runs${suffix}`);
   },
   listProfiles: () => jsonFetch<Profile[]>("/api/runs/profiles"),
+  profileCompareCandidates: (profileName: string) =>
+    jsonFetch<CompareCandidates>(
+      `/api/profile-compare/candidates?profile_name=${encodeURIComponent(profileName)}`,
+    ),
+  profileCompare: <T,>(profileName: string, by: "model" | "device", keys: string[]) =>
+    jsonFetch<T>(
+      `/api/profile-compare?profile_name=${encodeURIComponent(profileName)}&${
+        by === "model" ? "model_slugs" : "device_ids"
+      }=${encodeURIComponent(keys.join(","))}`,
+    ),
   getRun: (id: string) => jsonFetch<Run>(`/api/runs/${id}`),
   abortRun: (id: string) =>
     jsonFetch<{ run_id: string; result: string }>(`/api/runs/${id}/abort`, {

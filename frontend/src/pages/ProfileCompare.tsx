@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import ReactECharts from "echarts-for-react";
 
-import { api, getToken, type Device } from "@/api";
+import { api } from "@/api";
 import { humanBps, humanIops, humanNs } from "@/lib/format";
 import { MultiSelect, type MultiSelectOption } from "@/components/MultiSelect";
 import Plot3DBars from "@/components/Plot3DBars";
@@ -14,8 +14,11 @@ const HEATMAP_COLORS = ["#0c1426", "#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "
 const LS_PROFILE = "anvil.profileCompare.profile";
 const LS_DEVICES = "anvil.profileCompare.devices";
 const LS_VIEWMODE = "anvil.profileCompare.viewMode";
+const LS_GROUPBY = "anvil.profileCompare.groupBy";
+const LS_MODELS = "anvil.profileCompare.models";
 
 type ViewMode = "heatmap" | "3d";
+type GroupBy = "model" | "device";
 
 interface Point {
   raw_name: string;
@@ -31,14 +34,40 @@ interface Point {
   write_bw_bytes: number | null;
   read_clat_mean_ns: number | null;
   write_clat_mean_ns: number | null;
+  // min/max/n behind each median: drive-to-drive for models, run-to-run for drives
+  spread?: Record<string, { min: number; max: number; n: number }>;
 }
 
 interface Series {
-  device_id: string;
+  key: string;
+  kind: GroupBy;
   model: string;
   serial: string;
   brand: string;
+  unit_count: number;
+  run_count: number;
+  firmwares: string[];
+  units?: { device_id: string; serial: string; firmware: string | null; run_count: number }[];
   points: Point[];
+}
+
+function displayName(brand: string, model: string): string {
+  // brand is often inferred from the model's first word; don't print it twice
+  if (!brand || model.toUpperCase().startsWith(brand.toUpperCase())) return model;
+  return `${brand} ${model}`;
+}
+
+function seriesLabel(s: Series): string {
+  const name = displayName(s.brand, s.model);
+  return s.kind === "model" ? `${name} (n=${s.unit_count})` : `${name} · ${s.serial}`;
+}
+
+function findPoint(s: Series, xKey: DimKey, xv: string, yKey?: DimKey, yv?: string): Point | undefined {
+  return s.points.find(
+    (p) =>
+      String(p[xKey as keyof Point]) === xv &&
+      (yKey === undefined || String(p[yKey as keyof Point]) === yv),
+  );
 }
 
 interface CompareResult {
@@ -81,13 +110,17 @@ function saveLS(key: string, value: unknown) {
 
 export default function ProfileCompare() {
   const { t } = useTranslation();
-  const devicesQ = useQuery({ queryKey: ["devices"], queryFn: api.listDevices });
   const profilesQ = useQuery({ queryKey: ["profiles"], queryFn: api.listProfiles });
 
   const [profileName, setProfileName] = useState<string>(() => loadLS<string>(LS_PROFILE, ""));
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => loadLS<GroupBy>(LS_GROUPBY, "model"));
+  const [modelSlugs, setModelSlugs] = useState<Set<string>>(
+    () => new Set(loadLS<string[]>(LS_MODELS, [])),
+  );
   const [deviceIds, setDeviceIds] = useState<Set<string>>(
     () => new Set(loadLS<string[]>(LS_DEVICES, [])),
   );
+  const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(() => loadLS<ViewMode>(LS_VIEWMODE, "heatmap"));
   const [result, setResult] = useState<CompareResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,28 +128,47 @@ export default function ProfileCompare() {
   useEffect(() => { saveLS(LS_PROFILE, profileName); }, [profileName]);
   useEffect(() => { saveLS(LS_DEVICES, Array.from(deviceIds)); }, [deviceIds]);
   useEffect(() => { saveLS(LS_VIEWMODE, viewMode); }, [viewMode]);
+  useEffect(() => { saveLS(LS_GROUPBY, groupBy); }, [groupBy]);
+  useEffect(() => { saveLS(LS_MODELS, Array.from(modelSlugs)); }, [modelSlugs]);
 
-  const allDevices: Device[] = devicesQ.data ?? [];
   const profiles = profilesQ.data ?? [];
+  // Only models / drives that actually have complete runs of this profile.
+  const candQ = useQuery({
+    queryKey: ["profile-compare-candidates", profileName],
+    queryFn: () => api.profileCompareCandidates(profileName),
+    enabled: !!profileName,
+  });
+  const cand = candQ.data;
 
-  const deviceOptions: MultiSelectOption[] = allDevices.map((d) => ({
-    value: d.id,
-    label: `${d.brand || ""} ${d.model}`.trim(),
-    sub: d.serial,
+  const modelOptions: MultiSelectOption[] = (cand?.models ?? []).map((m) => ({
+    value: m.model_slug,
+    label: displayName(m.brand, m.model),
+    sub: [
+      t("profileCompare.unitsRuns", { units: m.unit_count, runs: m.run_count }),
+      m.firmwares.length ? `FW ${m.firmwares.join(", ")}` : "",
+    ].filter(Boolean).join(" · "),
   }));
+  const deviceOptions: MultiSelectOption[] = (cand?.devices ?? []).map((d) => ({
+    value: d.device_id,
+    label: displayName(d.brand, d.model),
+    sub: [d.serial, t("profileCompare.runsOnly", { runs: d.run_count }), d.firmware ? `FW ${d.firmware}` : ""]
+      .filter(Boolean).join(" · "),
+  }));
+  const options = groupBy === "model" ? modelOptions : deviceOptions;
+  const rawSelected = groupBy === "model" ? modelSlugs : deviceIds;
+  const setSelected = groupBy === "model" ? setModelSlugs : setDeviceIds;
+  // Drop remembered selections that have no data for the current profile.
+  const available = new Set(options.map((o) => o.value));
+  const selected = cand ? new Set([...rawSelected].filter((v) => available.has(v))) : rawSelected;
 
   async function load() {
-    if (!profileName || deviceIds.size < 2) return;
+    if (!profileName || selected.size === 0) return;
     setLoading(true);
+    setError(null);
     try {
-      const resp = await fetch(
-        `/api/profile-compare?profile_name=${encodeURIComponent(profileName)}&device_ids=${encodeURIComponent(Array.from(deviceIds).join(","))}`,
-        { headers: { Authorization: `Bearer ${getToken() || ""}` } },
-      );
-      if (!resp.ok) throw new Error(await resp.text());
-      setResult(await resp.json());
+      setResult(await api.profileCompare<CompareResult>(profileName, groupBy, Array.from(selected)));
     } catch (e) {
-      alert(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -144,13 +196,44 @@ export default function ProfileCompare() {
               ))}
             </select>
           </div>
-          <div className="col" style={{ gap: 4, minWidth: 300 }}>
-            <span className="dim" style={{ fontSize: 11 }}>{t("profileCompare.pickDevices")}</span>
+          <div className="col" style={{ gap: 4 }}>
+            <span className="dim" style={{ fontSize: 11 }}>{t("profileCompare.groupBy")}</span>
+            <div className="row" style={{ gap: 0 }}>
+              <button
+                className={groupBy === "model" ? "btn-primary" : ""}
+                onClick={() => { setGroupBy("model"); setResult(null); }}
+                style={{ fontSize: 12, padding: "6px 10px", borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+              >
+                {t("profileCompare.groupByModel")}
+              </button>
+              <button
+                className={groupBy === "device" ? "btn-primary" : ""}
+                onClick={() => { setGroupBy("device"); setResult(null); }}
+                style={{ fontSize: 12, padding: "6px 10px", borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+              >
+                {t("profileCompare.groupByDevice")}
+              </button>
+            </div>
+          </div>
+          <div className="col" style={{ gap: 4, minWidth: 360, flex: "1 1 360px" }}>
+            <span className="dim" style={{ fontSize: 11 }}>
+              {groupBy === "model" ? t("profileCompare.pickModels") : t("profileCompare.pickDevices")}
+            </span>
             <MultiSelect
-              options={deviceOptions}
-              selected={deviceIds}
-              onChange={setDeviceIds}
-              placeholder={t("profileCompare.pickDevices")}
+              options={options}
+              selected={selected}
+              onChange={setSelected}
+              placeholder={
+                !profileName
+                  ? t("profileCompare.pickProfileFirst")
+                  : cand && options.length === 0
+                    ? t("profileCompare.noCandidates")
+                    : groupBy === "model" ? t("profileCompare.pickModels") : t("profileCompare.pickDevices")
+              }
+              searchPlaceholder={t("profileCompare.filter")}
+              allLabel={t("profileCompare.all")}
+              noneLabel={t("profileCompare.none")}
+              disabled={!profileName || options.length === 0}
             />
           </div>
           <div className="col" style={{ gap: 4 }}>
@@ -172,14 +255,17 @@ export default function ProfileCompare() {
               </button>
             </div>
           </div>
-          <button className="btn-primary" onClick={load} disabled={loading || !profileName || deviceIds.size < 2}>
+          <button className="btn-primary" onClick={load} disabled={loading || !profileName || selected.size === 0}>
             {loading ? t("profileCompare.loading") : t("profileCompare.compare")}
           </button>
         </div>
       </div>
 
+      {error && <div className="badge badge-err" style={{ padding: 8 }}>{error}</div>}
+
       {result && result.series.length > 0 && (
         <div className="col" style={{ gap: 24 }}>
+          <SampleSummary series={result.series} />
           {result.groups.map((group) => (
             <GroupChart key={group} group={group} series={result.series} viewMode={viewMode} />
           ))}
@@ -193,6 +279,67 @@ export default function ProfileCompare() {
       )}
     </div>
   );
+}
+
+function SampleSummary({ series }: { series: Series[] }) {
+  const { t } = useTranslation();
+  const isModel = series[0]?.kind === "model";
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>{t("profileCompare.samplesTitle")}</h3>
+      <div className="dim" style={{ fontSize: 12, marginBottom: 10 }}>
+        {isModel ? t("profileCompare.medianNoteModel") : t("profileCompare.medianNoteDevice")}
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>{t("profileCompare.colSeries")}</th>
+            {isModel && <th>{t("profileCompare.colUnits")}</th>}
+            <th>{t("profileCompare.colRuns")}</th>
+            <th>{t("profileCompare.colFirmware")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {series.map((s, i) => (
+            <tr key={s.key}>
+              <td>
+                <span style={{ color: PALETTE[i % PALETTE.length], marginRight: 6 }}>■</span>
+                {seriesLabel(s)}
+                {s.units && (
+                  <div className="dim mono" style={{ fontSize: 10, marginTop: 2 }}>
+                    {s.units.map((u) => `${u.serial}×${u.run_count}`).join("  ")}
+                  </div>
+                )}
+              </td>
+              {isModel && <td className="mono">{s.unit_count}</td>}
+              <td className="mono">{s.run_count}</td>
+              <td className="mono" style={{ fontSize: 12 }}>
+                {s.firmwares.join(", ") || "—"}
+                {s.firmwares.length > 1 && (
+                  <span className="badge badge-warn" style={{ marginLeft: 6, fontSize: 10 }}>
+                    {t("profileCompare.mixedFirmware")}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function spreadText(
+  t: (k: string) => string,
+  s: Series,
+  pt: Point | undefined,
+  metric: string,
+  formatter: (v: number) => string,
+): string {
+  const sp = pt?.spread?.[metric];
+  if (!sp || sp.n < 2) return "";
+  const label = s.kind === "model" ? t("profileCompare.rangeUnits") : t("profileCompare.rangeRuns");
+  return `${label}: ${formatter(sp.min)} – ${formatter(sp.max)} (n=${sp.n})`;
 }
 
 function dimLabel(t: (k: string) => string, k: DimKey): string {
@@ -307,11 +454,11 @@ function Chart3DSection({
   yDim: { key: DimKey; values: string[] };
   metric: string;
   formatter: (v: number) => string;
-  series: { device_id: string; model: string; brand: string; serial: string; points: Point[] }[];
+  series: Series[];
   t: (k: string) => string;
 }) {
   const devices = series.map((dev, devIdx) => {
-    const devLabel = `${dev.brand} ${dev.model}`.trim() || dev.serial;
+    const devLabel = seriesLabel(dev);
     const matrix: (number | null)[][] = xDim.values.map((xv) =>
       yDim.values.map((yv) => {
         const pt = dev.points.find(
@@ -355,7 +502,7 @@ function HeatmapRow({
   yDim: { key: DimKey; values: string[] };
   metric: string;
   formatter: (v: number) => string;
-  series: { device_id: string; model: string; brand: string; serial: string; points: Point[] }[];
+  series: Series[];
   t: (k: string) => string;
 }) {
   const allValues: number[] = [];
@@ -380,7 +527,7 @@ function HeatmapRow({
       >
         {series.map((dev, devIdx) => (
           <DeviceHeatmap
-            key={dev.device_id}
+            key={dev.key}
             device={dev}
             devColor={PALETTE[devIdx % PALETTE.length]}
             xDim={xDim}
@@ -401,7 +548,7 @@ function HeatmapRow({
 function DeviceHeatmap({
   device, devColor, xDim, yDim, metric, formatter, min, max, t, title,
 }: {
-  device: { model: string; brand: string; serial: string; points: Point[] };
+  device: Series;
   devColor: string;
   xDim: { key: DimKey; values: string[] };
   yDim: { key: DimKey; values: string[] };
@@ -412,7 +559,7 @@ function DeviceHeatmap({
   t: (k: string) => string;
   title: string;
 }) {
-  const devLabel = `${device.brand} ${device.model}`.trim() || device.serial;
+  const devLabel = seriesLabel(device);
 
   const data: [number, number, number | "-"][] = [];
   xDim.values.forEach((xv, xi) => {
@@ -444,7 +591,9 @@ function DeviceHeatmap({
         const xv = xDim.values[p.value[0]];
         const yv = yDim.values[p.value[1]];
         const v = p.value[2];
-        return `<b>${devLabel}</b><br/>${dimLabel(t, xDim.key)}: ${xv}<br/>${dimLabel(t, yDim.key)}: ${yv}<br/>${title}: ${v === "-" ? "—" : formatter(v)}`;
+        const pt = findPoint(device, xDim.key, xv, yDim.key, yv);
+        const range = spreadText(t, device, pt, metric, formatter);
+        return `<b>${devLabel}</b><br/>${dimLabel(t, xDim.key)}: ${xv}<br/>${dimLabel(t, yDim.key)}: ${yv}<br/>${title}: ${v === "-" ? "—" : formatter(v)}${range ? `<br/><span style="color:#94a3b8">${range}</span>` : ""}`;
       },
     },
     grid: { top: 36, bottom: 64, left: 64, right: 16 },
@@ -535,11 +684,11 @@ function Chart2D({
   xDim: { key: DimKey; values: string[] };
   metric: string;
   formatter: (v: number) => string;
-  series: { model: string; brand: string; serial: string; points: Point[] }[];
+  series: Series[];
   t: (k: string) => string;
 }) {
   const echartsSeries = series.map((dev, devIdx) => {
-    const devLabel = `${dev.brand} ${dev.model}`.trim() || dev.serial;
+    const devLabel = seriesLabel(dev);
     const data = xDim.values.map((xv) => {
       const pt = dev.points.find((p) => String(p[xDim.key as keyof Point]) === xv);
       return pt ? (pt as any)[metric] ?? null : null;
@@ -564,7 +713,17 @@ function Chart2D({
       backgroundColor: "#111a2e",
       borderColor: "#233256",
       textStyle: { color: "#e2e8f0", fontSize: 11 },
-      valueFormatter: (v: number | null) => (v == null ? "—" : formatter(v)),
+      formatter: (params: { axisValue: string; seriesIndex: number; marker: string; value: number | null }[]) => {
+        const xv = params[0]?.axisValue ?? "";
+        const lines = params.map((p) => {
+          const s = series[p.seriesIndex];
+          const range = spreadText(t, s, findPoint(s, xDim.key, xv), metric, formatter);
+          return `${p.marker}${seriesLabel(s)}: <b>${p.value == null ? "—" : formatter(p.value)}</b>${
+            range ? ` <span style="color:#94a3b8">${range}</span>` : ""
+          }`;
+        });
+        return [`${dimLabel(t, xDim.key)}: ${xv}`, ...lines].join("<br/>");
+      },
     },
     legend: { bottom: 0, textStyle: { color: "#94a3b8", fontSize: 10 }, type: "scroll" },
     grid: { top: 50, bottom: 60, left: 80, right: 24 },
